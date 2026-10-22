@@ -6,6 +6,23 @@ from .candidate_persistence import (
     CandidatePersistenceService,
     CrossEpisodeIntegrityError,
     EditorialAuthorizationError,
+    SegmentReferenceIntegrityError,
+    persist_transcript_chunks,
+    persist_transcript_segments,
+)
+from .candidate_reconciliation import (
+    CandidateReconciler,
+    InsightReconciliationResult,
+    MergeRecord,
+    PayloadReconciliationResult,
+    QuotationReconciliationResult,
+    ReconciliationReport,
+    normalize_category,
+    normalize_text,
+    reconcile_insights,
+    reconcile_payload,
+    reconcile_payloads,
+    reconcile_quotations,
 )
 from .chunker import TranscriptChunker, estimate_token_count, format_chunk_text
 from .extraction_models import (
@@ -54,6 +71,25 @@ from .models import (
     TranscriptChunk,
     TranscriptOverlapError,
     TranscriptPipelineError,
+)
+from .job_worker import (
+    JobClaimError,
+    JobWorker,
+    JobWorkerError,
+    JobWorkerResult,
+    ProcessingJobRecord,
+    StaticTranscriptProvider,
+    TranscriptProvider,
+)
+from .pipeline_orchestrator import (
+    EditorialProtectionError,
+    PipelineExecutionResult,
+    PipelineExtractionError,
+    PipelineInputError,
+    PipelineOrchestrator,
+    PipelineOrchestratorError,
+    PipelinePersistenceError,
+    PipelineValidationError,
 )
 from .semantic_validator import SemanticEvidenceValidator
 from .syntactic_validator import SyntacticValidator
@@ -104,10 +140,13 @@ __all__ = [
     "CandidateEvidenceReference",
     "CandidateExtractionPayload",
     "ExtractionRunRecord",
-    # Candidate Persistence & Editorial Boundaries (Milestone 3)
+    # Candidate Persistence & Editorial Boundaries (Milestone 3 & 4)
     "CandidatePersistenceService",
+    "persist_transcript_segments",
+    "persist_transcript_chunks",
     "EditorialAuthorizationError",
     "CrossEpisodeIntegrityError",
+    "SegmentReferenceIntegrityError",
     # Gemini Client
     "GeminiClient",
     "GeminiConfig",
@@ -130,4 +169,34 @@ __all__ = [
     "SyntacticValidator",
     "SemanticEvidenceValidator",
     "ExtractionService",
+    # Candidate Reconciliation (Milestone 4 Step 3)
+    "CandidateReconciler",
+    "reconcile_insights",
+    "reconcile_quotations",
+    "reconcile_payload",
+    "reconcile_payloads",
+    "MergeRecord",
+    "ReconciliationReport",
+    "InsightReconciliationResult",
+    "QuotationReconciliationResult",
+    "PayloadReconciliationResult",
+    "normalize_text",
+    "normalize_category",
+    # Pipeline Orchestration (Milestone 4 Step 4)
+    "PipelineOrchestrator",
+    "PipelineExecutionResult",
+    "PipelineOrchestratorError",
+    "PipelineInputError",
+    "PipelineExtractionError",
+    "PipelineValidationError",
+    "PipelinePersistenceError",
+    "EditorialProtectionError",
+    # Ingestion Job Worker (Milestone 4 Step 4.3)
+    "JobWorker",
+    "JobWorkerResult",
+    "JobWorkerError",
+    "JobClaimError",
+    "ProcessingJobRecord",
+    "TranscriptProvider",
+    "StaticTranscriptProvider",
 ]

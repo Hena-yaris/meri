@@ -353,7 +353,8 @@ class GeminiClient:
             "1. Ground Truth: Only extract facts, metrics, and insights explicitly stated in the transcript.\n"
             "2. Direct Amharic Quotations: Spoken quotes MUST be in their original spoken Amharic script. "
             "Never paraphrase a quote as direct speech.\n"
-            "3. Evidence Grounding: Every insight must cite valid evidence_segment_indices. "
+            "3. Evidence Grounding: Every insight must cite valid evidence_segment_indices matching the explicit "
+            "[Seg <index> | ...] tags in the transcript. "
             "Every quote must cite valid source_segment_indices matching where the words were spoken.\n"
             "4. Format: Output MUST be valid JSON conforming strictly to the requested schema.\n"
         )

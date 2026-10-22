@@ -10,6 +10,7 @@ MIGRATIONS_DIR="${ROOT_DIR}/supabase/migrations"
 BOOTSTRAP_FILE="${ROOT_DIR}/backend/tests/local_test_bootstrap.sql"
 TEST_SQL_FILE="${ROOT_DIR}/backend/tests/verify_database_foundation.sql"
 TEST_M3_SQL_FILE="${ROOT_DIR}/backend/tests/verify_milestone3_boundaries.sql"
+TEST_M4_SQL_FILE="${ROOT_DIR}/backend/tests/verify_milestone4_orchestrator.sql"
 
 # Configuration defaults
 CONTAINER_NAME="${CONTAINER_NAME:-leyu_postgres}"
@@ -89,6 +90,9 @@ run_sql_cmd "${TEMP_DB}" "${TEST_SQL_FILE}"
 
 echo "       Suite 2: Milestone 3 Boundaries & Provenance (11 tests)..."
 run_sql_cmd "${TEMP_DB}" "${TEST_M3_SQL_FILE}"
+
+echo "       Suite 3: Milestone 4 Orchestrator & Worker Safety (9 tests)..."
+run_sql_cmd "${TEMP_DB}" "${TEST_M4_SQL_FILE}"
 
 echo "============================================================================="
 echo "Verification run completed successfully."
