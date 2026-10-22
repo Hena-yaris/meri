@@ -1,0 +1,227 @@
+{
+  "_meta": {
+    "dataset": "Meri Development Sample Dataset",
+    "disclaimer": "DEVELOPMENT SAMPLE ONLY: The guest profiles, companies, and quotations in this file are synthetic illustrative models created for engineering development and interface testing. They do not represent real Meri Podcast recordings, verified individuals, or real-life statements.",
+    "version": "1.0.0",
+    "lastUpdated": "2026-10-19"
+  },
+  "episodes": [
+    {
+      "id": "ep-101",
+      "title": "Scaling Cold Chain Logistics Across Agricultural Corridors",
+      "podcastTitle": "Meri Business Series",
+      "episodeNumber": 101,
+      "durationMinutes": 74,
+      "publishedAt": "2026-09-12T08:00:00.000Z",
+      "summary": "An in-depth exploration into the structural obstacles of agricultural freight in Ethiopia. Dawit outlines how building temperature-controlled transit networks reduced produce loss by 42% between Arsi and Addis Ababa markets.",
+      "isFeatured": true,
+      "tags": ["Logistics", "Agritech", "Operations", "Supply Chain"],
+      "audioUrl": "https://sample-audio.meri.et/ep101.mp3",
+      "coverImageUrl": null,
+      "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep101",
+      "guest": {
+        "id": "guest-dawit-t",
+        "name": "Dawit Tadesse",
+        "title": "Founder & Managing Director",
+        "company": "Nile Cold Chain Logistics",
+        "industry": "Agricultural Logistics & Cold Storage",
+        "bio": "Mechanical engineer turned logistics entrepreneur who spent 8 years designing modular refrigerated truck containers to preserve perishable fruits and vegetables across high-altitude freight routes.",
+        "avatarUrl": null
+      },
+      "insights": [
+        {
+          "id": "ins-101-1",
+          "episodeId": "ep-101",
+          "title": "Decoupling Fleet Ownership from Logistics Orchestration",
+          "category": "Operations",
+          "summary": "Purchasing heavy transport vehicles burns seed capital too early. Partnering with existing regional truck owners through telemetry retrofits yields faster unit profitability.",
+          "takeaways": [
+            "Heavy asset purchases tie down working capital needed for quality control.",
+            "Retrofitting independent trucker fleets with IoT temperature probes cuts capital expenditure by 60%.",
+            "Contract incentives must reward cargo arrival quality rather than transit velocity alone."
+          ],
+          "practicalAction": "Audit current asset depreciation against subcontracting models before financing fleet expansions."
+        },
+        {
+          "id": "ins-101-2",
+          "episodeId": "ep-101",
+          "title": "Managing High-Altitude Cold Storage Fluctuations",
+          "category": "Technology & Infrastructure",
+          "summary": "Standard imported cooling units fail under frequent altitude shifts and grid volatility. Redundant hybrid solar-diesel compressors protect perishable inventory from spoiling.",
+          "takeaways": [
+            "Regional distribution hubs require dual-compressor failovers.",
+            "Thermal insulation using locally available volcanic pumice provides cost-effective insulation backup."
+          ],
+          "practicalAction": "Install thermal battery backups on perishable nodes subject to intermittent electrical supply."
+        }
+      ],
+      "quotations": [
+        {
+          "id": "quote-101-1",
+          "episodeId": "ep-101",
+          "amharicQuote": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
+          "englishTranslation": "The greatest test in logistics isn't buying trucks; it's calculating by the second the value of harvest perishing on the highway.",
+          "speaker": "Dawit Tadesse",
+          "timestampSeconds": 1420,
+          "context": "Explaining why telemetry monitoring matters more than fleet volume during seasonal harvest peaks."
+        },
+        {
+          "id": "quote-101-2",
+          "episodeId": "ep-101",
+          "amharicQuote": "ገበሬው የደከመበትን እህል ገበያ ላይ በክብር እንዲሸጥ መንገድ ማቃናት የሀገር ኢኮኖሚ መሰረት ነው።",
+          "englishTranslation": "Smoothing the path so a farmer's labor sells with dignity in city markets is the fundamental bedrock of the national economy.",
+          "speaker": "Dawit Tadesse",
+          "timestampSeconds": 3210,
+          "context": "Reflecting on the mission driving agricultural supply infrastructure in rural Ethiopia."
+        }
+      ]
+    },
+    {
+      "id": "ep-102",
+      "title": "Offline-First Digital Merchant Systems in Merkato",
+      "podcastTitle": "Meri Business Series",
+      "episodeNumber": 102,
+      "durationMinutes": 62,
+      "publishedAt": "2026-09-26T10:00:00.000Z",
+      "summary": "Bethlehem breaks down how building merchant bookkeeping and invoicing software tailored for offline connectivity convinced over 1,200 cash-first wholesalers in Merkato to digitize transactions.",
+      "isFeatured": false,
+      "tags": ["Fintech", "Product Strategy", "B2B", "Merchant Tech"],
+      "audioUrl": "https://sample-audio.meri.et/ep102.mp3",
+      "coverImageUrl": null,
+      "youtubeUrl": "https://youtu.be/sample-ep102",
+      "guest": {
+        "id": "guest-bethlehem-a",
+        "name": "Bethlehem Assefa",
+        "title": "Co-founder & Chief Product Officer",
+        "company": "Walia Merchant Tech",
+        "industry": "Enterprise & Retail Fintech",
+        "bio": "Product designer and former telecommunications systems architect who pioneered zero-sync transaction records for merchant stalls throughout Addis Ababa.",
+        "avatarUrl": null
+      },
+      "insights": [
+        {
+          "id": "ins-102-1",
+          "episodeId": "ep-102",
+          "title": "Designing for Mistrust Before Designing for Usability",
+          "category": "Product Strategy",
+          "summary": "Traditional traders resist cloud interfaces not due to complexity, but fear of transactional opacity and tax ambiguity. Physical receipts paired with local cryptographic logs bridge this confidence gap.",
+          "takeaways": [
+            "Hardware thermal printing remains an essential trust anchor for cash traders.",
+            "Local peer-to-peer Bluetooth receipt validation works when telecom towers experience downtime.",
+            "Amharic-first typography and vernacular financial terms drastically reduce merchant onboarding time."
+          ],
+          "practicalAction": "Test your software interface directly in busy marketplace stalls under natural sunlight and spotty network connectivity."
+        }
+      ],
+      "quotations": [
+        {
+          "id": "quote-102-1",
+          "episodeId": "ep-102",
+          "amharicQuote": "ነጋዴው የለመደውን ደብተር የሚያስቀምጠው አዲሱ ሲስተም ከሱ ደብተር በበለጠ እምነት የሚጥልበት ሆኖ ሲያገኘው ብቻ ነው።",
+          "englishTranslation": "A merchant will only set aside their paper ledger when the new system earns greater trust than their own notebook.",
+          "speaker": "Bethlehem Assefa",
+          "timestampSeconds": 1845,
+          "context": "Discussing user trust and behavioral friction when transitioning traditional traders to software."
+        }
+      ]
+    },
+    {
+      "id": "ep-103",
+      "title": "Domestic Pharmaceutical Formulation Under Foreign Exchange Constraints",
+      "podcastTitle": "Meri Business Series",
+      "episodeNumber": 103,
+      "durationMinutes": 88,
+      "publishedAt": "2026-10-04T14:30:00.000Z",
+      "summary": "Dr. Yohannes provides a masterclass on establishing sterile active pharmaceutical ingredient packaging inside industrial parks, navigating raw material procurement cycles, and building clinical workforce pipelines.",
+      "isFeatured": false,
+      "tags": ["Manufacturing", "Healthcare", "Policy & Trade", "Industrial"],
+      "audioUrl": "https://sample-audio.meri.et/ep103.mp3",
+      "coverImageUrl": null,
+      "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep103",
+      "guest": {
+        "id": "guest-yohannes-b",
+        "name": "Dr. Yohannes Berhanu",
+        "title": "Chief Executive Officer",
+        "company": "Abyssinia Health Labs",
+        "industry": "Pharmaceutical Manufacturing",
+        "bio": "Pharmacologist and manufacturing executive with 20 years of experience transitioning critical IV fluid and antibiotic synthesis from imports to domestic industrial production.",
+        "avatarUrl": null
+      },
+      "insights": [
+        {
+          "id": "ins-103-1",
+          "episodeId": "ep-103",
+          "title": "Mitigating Foreign Currency Bottlenecks with Export Offset",
+          "category": "Capital & Finance",
+          "summary": "Relying on central bank allocations to import active pharmaceutical ingredients stalls production. Establishing a regional export wing in veterinary medicines generates captive foreign currency reserves for human medical imports.",
+          "takeaways": [
+            "Diversify product catalogs with veterinary consumables that have immediate East African export demand.",
+            "Reinvest export foreign currency yields directly into input materials for essential human pharmaceuticals.",
+            "Long-term industrial survival requires hedging import dependency with organic regional sales."
+          ],
+          "practicalAction": "Analyze which secondary product lines can generate export forex to subsidize primary domestic product inputs."
+        }
+      ],
+      "quotations": [
+        {
+          "id": "quote-103-1",
+          "episodeId": "ep-103",
+          "amharicQuote": "የሀገር ጤና በውጭ ምንዛሬ እጥረት ምክንያት መድሃኒት ሲያጣ ዝም ብሎ መመልከት ለሙያችንም ለህሊናችንም ክህደት ነው።",
+          "englishTranslation": "Standing idly by while patients lack medicine due to foreign exchange shortages is a betrayal of both our profession and our conscience.",
+          "speaker": "Dr. Yohannes Berhanu",
+          "timestampSeconds": 2490,
+          "context": "On why establishing domestic sterile manufacturing plants became a lifelong imperative."
+        }
+      ]
+    },
+    {
+      "id": "ep-104",
+      "title": "Moving from Raw Commodity to Packaged Specialty Coffee Exports",
+      "podcastTitle": "Meri Business Series",
+      "episodeNumber": 104,
+      "durationMinutes": 68,
+      "publishedAt": "2026-10-15T09:15:00.000Z",
+      "summary": "Samrawit details the ten-year journey from green coffee brokering to building a premium roasted and packaged brand sold directly to specialty retailers in Nairobi, Dubai, and Johannesburg.",
+      "isFeatured": false,
+      "tags": ["Export", "Branding", "Agriculture", "Value Addition"],
+      "audioUrl": "https://sample-audio.meri.et/ep104.mp3",
+      "coverImageUrl": null,
+      "youtubeUrl": null,
+      "guest": {
+        "id": "guest-samrawit-k",
+        "name": "Samrawit Kebede",
+        "title": "Founder & Master Roaster",
+        "company": "Buna Origin Roasters",
+        "industry": "Specialty Agri-Processing & Export",
+        "bio": "Agronomist and Q-grader champion who built an integrated origin roasting company providing living wage bonuses directly to washing station communities in Yirgacheffe and Guji.",
+        "avatarUrl": null
+      },
+      "insights": [
+        {
+          "id": "ins-104-1",
+          "episodeId": "ep-104",
+          "title": "Capturing Value at Origin Through Single-Origin Traceability",
+          "category": "Branding & Strategy",
+          "summary": "Exporting raw green beans captures only 12% of retail coffee margins. Packaging and nitrogen-flushing at origin retains up to 55% of value within the producing community.",
+          "takeaways": [
+            "Roasting at origin requires strict nitrogen packaging to guarantee freshness during sea transit.",
+            "Modern consumers pay a 40% premium when farm micro-lot origins and altitude metrics are transparently verified.",
+            "Direct trade partnerships require year-round cupping lab investments."
+          ],
+          "practicalAction": "Transition at least 15% of bulk commodity output into branded, value-added retail packages."
+        }
+      ],
+      "quotations": [
+        {
+          "id": "quote-104-1",
+          "episodeId": "ep-104",
+          "amharicQuote": "ቡናችን በዓለም ላይ ወደር የሌለው ቅርስ ሆኖ ሳለ፣ እሴቱን በሙሉ ሌላ ሀገር እንዲወስደው መፍቀድ የለብንም።",
+          "englishTranslation": "While our coffee remains an unmatched heritage to the world, we must never permit the entire downstream value to be captured elsewhere.",
+          "speaker": "Samrawit Kebede",
+          "timestampSeconds": 980,
+          "context": "Explaining why roasting and branding at origin is essential for Ethiopian coffee equity."
+        }
+      ]
+    }
+  ]
+}

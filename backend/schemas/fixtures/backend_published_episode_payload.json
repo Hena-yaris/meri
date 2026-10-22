@@ -1,0 +1,81 @@
+{
+  "id": "7f8b9e6a-4d2c-4f1b-9e3a-8b2c4d6e8f0a",
+  "legacyId": "ep-101",
+  "title": "Scaling Cold Chain Logistics Across Agricultural Corridors",
+  "podcastTitle": "Meri Business Series",
+  "episodeNumber": 101,
+  "durationMinutes": 74,
+  "publishedAt": "2026-09-12T08:00:00.000Z",
+  "summary": "An in-depth exploration into the structural obstacles of agricultural freight in Ethiopia. Dawit outlines how building temperature-controlled transit networks reduced produce loss by 42% between Arsi and Addis Ababa markets.",
+  "isFeatured": true,
+  "tags": [
+    "Logistics",
+    "Agritech",
+    "Operations",
+    "Supply Chain"
+  ],
+  "audioUrl": "https://sample-audio.meri.et/ep101.mp3",
+  "coverImageUrl": null,
+  "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep101",
+  "guest": {
+    "id": "3b4c5d6e-7f8a-9b0c-1d2e-3f4a5b6c7d8e",
+    "legacyId": "guest-dawit-t",
+    "name": "Dawit Tadesse",
+    "title": "Founder & Managing Director",
+    "company": "Nile Cold Chain Logistics",
+    "industry": "Agricultural Logistics & Cold Storage",
+    "bio": "Mechanical engineer turned logistics entrepreneur who spent 8 years designing modular refrigerated truck containers to preserve perishable fruits and vegetables across high-altitude freight routes.",
+    "avatarUrl": null
+  },
+  "insights": [
+    {
+      "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "legacyId": "ins-101-1",
+      "episodeId": "7f8b9e6a-4d2c-4f1b-9e3a-8b2c4d6e8f0a",
+      "title": "Decoupling Fleet Ownership from Logistics Orchestration",
+      "category": "Operations",
+      "summary": "Purchasing heavy transport vehicles burns seed capital too early. Partnering with existing regional truck owners through telemetry retrofits yields faster unit profitability.",
+      "takeaways": [
+        "Heavy asset purchases tie down working capital needed for quality control.",
+        "Retrofitting independent trucker fleets with IoT temperature probes cuts capital expenditure by 60%.",
+        "Contract incentives must reward cargo arrival quality rather than transit velocity alone."
+      ],
+      "practicalAction": "Audit current asset depreciation against subcontracting models before financing fleet expansions."
+    },
+    {
+      "id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+      "legacyId": "ins-101-2",
+      "episodeId": "7f8b9e6a-4d2c-4f1b-9e3a-8b2c4d6e8f0a",
+      "title": "Managing High-Altitude Cold Storage Fluctuations",
+      "category": "Technology & Infrastructure",
+      "summary": "Standard imported cooling units fail under frequent altitude shifts and grid volatility. Redundant hybrid solar-diesel compressors protect perishable inventory from spoiling.",
+      "takeaways": [
+        "Regional distribution hubs require dual-compressor failovers.",
+        "Thermal insulation using locally available volcanic pumice provides cost-effective insulation backup."
+      ],
+      "practicalAction": "Install thermal battery backups on perishable nodes subject to intermittent electrical supply."
+    }
+  ],
+  "quotations": [
+    {
+      "id": "4c5d6e7f-8a9b-0c1d-2e3f-4a5b6c7d8e9f",
+      "legacyId": "quote-101-1",
+      "episodeId": "7f8b9e6a-4d2c-4f1b-9e3a-8b2c4d6e8f0a",
+      "amharicQuote": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
+      "englishTranslation": "The greatest test in logistics isn't buying trucks; it's calculating by the second the value of harvest perishing on the highway.",
+      "speaker": "Dawit Tadesse",
+      "timestampSeconds": 1420,
+      "context": "Explaining why telemetry monitoring matters more than fleet volume during seasonal harvest peaks."
+    },
+    {
+      "id": "5d6e7f8a-9b0c-1d2e-3f4a-5b6c7d8e9f0a",
+      "legacyId": "quote-101-2",
+      "episodeId": "7f8b9e6a-4d2c-4f1b-9e3a-8b2c4d6e8f0a",
+      "amharicQuote": "ገበሬው የደከመበትን እህል ገበያ ላይ በክብር እንዲሸጥ መንገድ ማቃናት የሀገር ኢኮኖሚ መሰረት ነው።",
+      "englishTranslation": "Smoothing the path so a farmer's labor sells with dignity in city markets is the fundamental bedrock of the national economy.",
+      "speaker": "Dawit Tadesse",
+      "timestampSeconds": 3210,
+      "context": "Reflecting on the mission driving agricultural supply infrastructure in rural Ethiopia."
+    }
+  ]
+}

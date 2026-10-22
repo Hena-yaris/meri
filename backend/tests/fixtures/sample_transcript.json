@@ -1,0 +1,35 @@
+{
+  "format": "segments_json",
+  "language": "am",
+  "acquisitionMethod": "manual_upload",
+  "segments": [
+    {
+      "segmentIndex": 0,
+      "startMs": 0,
+      "endMs": 14200,
+      "speakerLabel": "Dawit Tadesse",
+      "text": "እንኳን ደህና መጣችሁ። ዛሬ በዋናነት የምናወራው ስለ ኢትዮጵያ የቀዝቃዛ ሰንሰለት ሎጂስቲክስ ይሆናል።"
+    },
+    {
+      "segmentIndex": 1,
+      "startMs": 14201,
+      "endMs": 35000,
+      "speakerLabel": "Dawit Tadesse",
+      "text": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።"
+    },
+    {
+      "segmentIndex": 2,
+      "startMs": 35001,
+      "endMs": 58000,
+      "speakerLabel": "Host",
+      "text": "ይህ በጣም ወሳኝ ነጥብ ነው። ታዲያ የገበሬዎችን ምርት ወደ አዲስ አበባ ለማጓጓዝ የመጀመሪያው ስትራቴጂ ምን ነበር?"
+    },
+    {
+      "segmentIndex": 3,
+      "startMs": 58001,
+      "endMs": 85000,
+      "speakerLabel": "Dawit Tadesse",
+      "text": "መጀመሪያ ላይ የራሳችንን መኪና ከመግዛት ይልቅ ያሉትን የጭነት መኪናዎች በመከራየት እና በማሻሻል ጀመርን።"
+    }
+  ]
+}

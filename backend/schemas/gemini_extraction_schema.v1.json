@@ -1,0 +1,273 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://meri.et/schemas/gemini_extraction_schema.v1.json",
+  "title": "Meri Gemini Candidate Knowledge Extraction Schema",
+  "description": "Versioned JSON contract for Gemini structured knowledge candidate extraction from long-form business podcast transcripts.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "episode_summary",
+    "guest_profile",
+    "insights",
+    "quotations",
+    "suggested_tags"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Semantic schema version identifier."
+    },
+    "episode_summary": {
+      "type": "object",
+      "description": "Structured executive summaries of the episode discussion.",
+      "required": ["brief", "comprehensive", "primary_themes"],
+      "additionalProperties": false,
+      "properties": {
+        "brief": {
+          "type": "string",
+          "minLength": 30,
+          "maxLength": 320,
+          "description": "Concise 1-2 sentence high-level summary suitable for cards and mobile previews."
+        },
+        "comprehensive": {
+          "type": "string",
+          "minLength": 120,
+          "description": "In-depth multi-paragraph synthesis of the conversation, market context, and business thesis."
+        },
+        "primary_themes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 50
+          },
+          "description": "Core business themes discussed during the interview."
+        }
+      }
+    },
+    "guest_profile": {
+      "type": "object",
+      "description": "Candidate guest profile extracted from conversational context and episode introductions.",
+      "required": ["name", "title", "company", "bio", "industry"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Full name of the interviewed entrepreneur or business executive."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Current leadership title (e.g. 'Founder & CEO', 'Managing Director')."
+        },
+        "company": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Primary enterprise or organization founded or led by the guest."
+        },
+        "bio": {
+          "type": "string",
+          "minLength": 50,
+          "description": "Editorial biography summarizing prior background, achievements, and technical expertise."
+        },
+        "industry": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "description": "Primary business sector (e.g. 'Agricultural Logistics & Cold Storage', 'Fintech')."
+        },
+        "journey_summary": {
+          "type": "string",
+          "description": "Optional summary of how the founder started, pivoted, and scaled the enterprise."
+        }
+      }
+    },
+    "journey_milestones": {
+      "type": "array",
+      "description": "Chronological business milestones explicitly supported by interview transcript evidence.",
+      "items": {
+        "type": "object",
+        "required": [
+          "phase_or_year",
+          "milestone_description",
+          "strategic_decision",
+          "evidence_segment_indices"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "phase_or_year": {
+            "type": "string",
+            "description": "Year, time range, or company phase (e.g. '2019 - Seed Stage', 'Year 3')."
+          },
+          "milestone_description": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Description of the operational or market milestone achieved."
+          },
+          "strategic_decision": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Key strategic choice or pivot made during this milestone."
+          },
+          "evidence_segment_indices": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Strict references to transcript segment indices corroborating this milestone."
+          }
+        }
+      }
+    },
+    "insights": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Structured entrepreneurial lessons, strategic frameworks, and practical takeaways.",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "category",
+          "summary",
+          "takeaways",
+          "practical_action",
+          "evidence_segment_indices",
+          "confidence_score"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 140,
+            "description": "Concise, compelling takeaway title summarizing the strategic lesson."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "Operations",
+              "Fintech",
+              "Technology & Infrastructure",
+              "Leadership & Culture",
+              "Sales & Marketing",
+              "Finance & Capital",
+              "Legal & Regulatory",
+              "Product Strategy",
+              "Export & Trade"
+            ],
+            "description": "Standardized business domain taxonomy."
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 30,
+            "description": "Comprehensive explanation of the insight and underlying rationale."
+          },
+          "takeaways": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {
+              "type": "string",
+              "minLength": 10
+            },
+            "description": "Bullet-point takeaways detailing actionable business mechanics."
+          },
+          "practical_action": {
+            "type": "string",
+            "minLength": 15,
+            "description": "Concrete directive an entrepreneur or operator can implement immediately."
+          },
+          "evidence_segment_indices": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Exact zero-based transcript segment indices validating every claim made in this insight."
+          },
+          "confidence_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Model self-assessed confidence in the factual grounding of this extraction."
+          }
+        }
+      }
+    },
+    "quotations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "High-signal spoken quotes captured in original Amharic with verified English translations.",
+      "items": {
+        "type": "object",
+        "required": [
+          "amharic_quote",
+          "english_translation",
+          "speaker",
+          "source_segment_index",
+          "timestamp_seconds",
+          "context"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "amharic_quote": {
+            "type": "string",
+            "minLength": 10,
+            "description": "Exact or near-verbatim Amharic quote spoken by the guest."
+          },
+          "english_translation": {
+            "type": "string",
+            "minLength": 10,
+            "description": "High-fidelity English translation preserving nuance and business idioms."
+          },
+          "speaker": {
+            "type": "string",
+            "minLength": 2,
+            "description": "Name of the speaker who uttered the quote."
+          },
+          "source_segment_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Index of the specific transcript segment where this quote begins."
+          },
+          "timestamp_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Absolute elapsed start time in seconds, derived strictly from source_segment_index start_ms / 1000. Never invented."
+          },
+          "context": {
+            "type": "string",
+            "minLength": 15,
+            "description": "Conversational context and surrounding topic when the speaker made this statement."
+          },
+          "importance_rationale": {
+            "type": "string",
+            "description": "Editorial rationale explaining why this quote holds high lasting value."
+          }
+        }
+      }
+    },
+    "suggested_tags": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 30
+      },
+      "description": "Searchable topic tags for indexing and discovery."
+    }
+  }
+}

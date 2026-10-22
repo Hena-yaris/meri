@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0.0",
+  "episode_summary": {
+    "brief": "An in-depth exploration into the structural obstacles of agricultural freight in Ethiopia, demonstrating how telemetry-enabled cold chain logistics reduced produce loss by 42%.",
+    "comprehensive": "Dawit Tadesse explores the economic bottleneck of perishable transport across Ethiopian agricultural corridors. Drawing on his engineering background and eight years operating Nile Cold Chain Logistics, he discusses how high-altitude freight routes and volatile electrical grids destroy farm produce before reaching municipal markets. By retrofitting independent truckers' existing fleets with telemetry probes and installing hybrid pumice-insulated distribution nodes, Nile achieved sustainable unit margins without massive vehicle debt.",
+    "primary_themes": [
+      "Cold Chain Logistics",
+      "Agritech & Perishable Freight",
+      "Asset-Light Operations",
+      "Hardware Adaptation Under Grid Volatility"
+    ]
+  },
+  "guest_profile": {
+    "name": "Dawit Tadesse",
+    "title": "Founder & Managing Director",
+    "company": "Nile Cold Chain Logistics",
+    "bio": "Mechanical engineer turned logistics entrepreneur who spent 8 years designing modular refrigerated truck containers to preserve perishable fruits and vegetables across high-altitude freight routes.",
+    "industry": "Agricultural Logistics & Cold Storage",
+    "journey_summary": "Pivoted from pure engineering consultancy into logistics after witnessing 50% harvest spoilage on the Arsi to Addis corridor."
+  },
+  "journey_milestones": [
+    {
+      "phase_or_year": "2018 - Prototype Phase",
+      "milestone_description": "Engineered the first modular hybrid refrigerated container suited for rugged volcanic gravel roads.",
+      "strategic_decision": "Rejected purchasing new European refrigerated trucks in favor of building retrofittable container bodies locally.",
+      "evidence_segment_indices": [12, 13]
+    },
+    {
+      "phase_or_year": "2021 - Asset-Light Transition",
+      "milestone_description": "Onboarded 45 owner-operator truck drivers with telemetry sensor kits.",
+      "strategic_decision": "Shifted incentives from transit speed to cargo arrival temperature compliance.",
+      "evidence_segment_indices": [34, 35, 36]
+    }
+  ],
+  "insights": [
+    {
+      "title": "Decoupling Fleet Ownership from Logistics Orchestration",
+      "category": "Operations",
+      "summary": "Purchasing heavy transport vehicles burns seed capital too early. Partnering with existing regional truck owners through telemetry retrofits yields faster unit profitability.",
+      "takeaways": [
+        "Heavy asset purchases tie down working capital needed for quality control.",
+        "Retrofitting independent trucker fleets with IoT temperature probes cuts capital expenditure by 60%.",
+        "Contract incentives must reward cargo arrival quality rather than transit velocity alone."
+      ],
+      "practical_action": "Audit current asset depreciation against subcontracting models before financing fleet expansions.",
+      "evidence_segment_indices": [34, 35, 38],
+      "confidence_score": 0.96
+    },
+    {
+      "title": "Managing High-Altitude Cold Storage Fluctuations",
+      "category": "Technology & Infrastructure",
+      "summary": "Standard imported cooling units fail under frequent altitude shifts and grid volatility. Redundant hybrid solar-diesel compressors protect perishable inventory from spoiling.",
+      "takeaways": [
+        "Regional distribution hubs require dual-compressor failovers.",
+        "Thermal insulation using locally available volcanic pumice provides cost-effective insulation backup."
+      ],
+      "practical_action": "Install thermal battery backups on perishable nodes subject to intermittent electrical supply.",
+      "evidence_segment_indices": [52, 53, 56],
+      "confidence_score": 0.94
+    }
+  ],
+  "quotations": [
+    {
+      "amharic_quote": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
+      "english_translation": "The greatest test in logistics isn't buying trucks; it's calculating by the second the value of harvest perishing on the highway.",
+      "speaker": "Dawit Tadesse",
+      "source_segment_index": 42,
+      "timestamp_seconds": 1420,
+      "context": "Explaining why telemetry monitoring matters more than fleet volume during seasonal harvest peaks.",
+      "importance_rationale": "Encapsulates the core mental shift from capital expenditure to information velocity."
+    },
+    {
+      "amharic_quote": "ገበሬው የደከመበትን እህል ገበያ ላይ በክብር እንዲሸጥ መንገድ ማቃናት የሀገር ኢኮኖሚ መሰረት ነው።",
+      "english_translation": "Smoothing the path so a farmer's labor sells with dignity in city markets is the fundamental bedrock of the national economy.",
+      "speaker": "Dawit Tadesse",
+      "source_segment_index": 98,
+      "timestamp_seconds": 3210,
+      "context": "Reflecting on the mission driving agricultural supply infrastructure in rural Ethiopia.",
+      "importance_rationale": "Highlights the societal importance and economic dignity behind supply chain efficiency."
+    }
+  ],
+  "suggested_tags": [
+    "Logistics",
+    "Agritech",
+    "Operations",
+    "Supply Chain"
+  ]
+}

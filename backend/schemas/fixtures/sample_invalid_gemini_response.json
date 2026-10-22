@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0.0",
+  "episode_summary": {
+    "brief": "Too short",
+    "comprehensive": "Too short comprehensive text.",
+    "primary_themes": ["OnlyOneTheme"]
+  },
+  "guest_profile": {
+    "name": "Dawit Tadesse",
+    "title": "Founder",
+    "company": "Nile Logistics",
+    "bio": "Too short bio",
+    "industry": "Ag"
+  },
+  "insights": [
+    {
+      "title": "Bad Category Insight",
+      "category": "InvalidNonExistentCategory",
+      "summary": "This insight has an invalid category and negative confidence score.",
+      "takeaways": [],
+      "practical_action": "Do something",
+      "evidence_segment_indices": [],
+      "confidence_score": -0.5
+    }
+  ],
+  "quotations": [
+    {
+      "amharic_quote": "short",
+      "english_translation": "short",
+      "speaker": "Dawit",
+      "source_segment_index": -1,
+      "timestamp_seconds": -50,
+      "context": "too short"
+    }
+  ],
+  "suggested_tags": ["SingleTag"]
+}
