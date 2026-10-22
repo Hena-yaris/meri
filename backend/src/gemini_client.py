@@ -93,6 +93,11 @@ def validate_model_id_syntax(model_id: str) -> None:
 verify_model_configuration = validate_model_id_syntax
 
 
+def _redact_secrets(text: str) -> str:
+    """Strips API keys and sensitive tokens from error messages and logs."""
+    return re.sub(r"([?&]key=)[^&\s'\"]+", r"\1[REDACTED]", text)
+
+
 def check_model_availability(
     model_id: str,
     api_key: str,
@@ -108,6 +113,7 @@ def check_model_availability(
     2. The API key is authentic (HTTP 200).
     3. The model exists (not HTTP 404).
     4. The model declares 'generateContent' in supportedGenerationMethods.
+    5. API keys are strictly redacted in any error messages or exceptions.
     """
     validate_model_id_syntax(model_id)
     if not api_key:
@@ -124,7 +130,8 @@ def check_model_availability(
     try:
         status_code, headers, body_text = effective_transport(request, timeout)
     except Exception as exc:
-        raise GeminiClientError(f"Model availability network transport error: {exc}") from exc
+        safe_msg = _redact_secrets(str(exc))
+        raise GeminiClientError(f"Model availability network transport error: {safe_msg}") from exc
 
     if status_code == 200:
         try:
@@ -147,7 +154,79 @@ def check_model_availability(
             f"Configured model '{model_id}' was not found on Gemini API (HTTP 404). Model may be deprecated or unreleased."
         )
 
-    raise GeminiClientError(f"Model availability check failed with HTTP {status_code}: {body_text[:200]}")
+    safe_body = _redact_secrets(body_text[:200])
+    raise GeminiClientError(f"Model availability check failed with HTTP {status_code}: {safe_body}")
+
+
+def verify_model_preflight(
+    model_id: str,
+    api_key: str,
+    transport: Optional[Transport] = None,
+    timeout: float = 10.0,
+    verify_structured_output: bool = True,
+) -> Dict[str, Any]:
+    """
+    Comprehensive preflight check executed strictly before live transcript extraction.
+    Asserts that:
+    1. Model-ID syntax is valid locally.
+    2. Model exists remotely and supports 'generateContent'.
+    3. Structured-output configuration (responseMimeType='application/json') is supported.
+    4. API keys are NEVER logged or leaked.
+    NOTE: This is intentionally never run during app startup or unit tests.
+    """
+    # 1. Availability and generateContent support
+    model_metadata = check_model_availability(
+        model_id=model_id,
+        api_key=api_key,
+        transport=transport,
+        timeout=timeout,
+    )
+
+    # 2. Structured output capability probe (verifying application/json responseMimeType)
+    if verify_structured_output:
+        effective_transport = transport or _default_urllib_transport
+        probe_payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": "Preflight health check probe. Return JSON: {\"status\": \"ok\"}"}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.0,
+                "responseMimeType": "application/json",
+            },
+        }
+        probe_bytes = json.dumps(probe_payload).encode("utf-8")
+        target_url = f"{GEMINI_API_ENDPOINT}/{model_id}:generateContent?key={api_key}"
+
+        request = urllib.request.Request(
+            url=target_url,
+            data=probe_bytes,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "User-Agent": "Meri-Content-Pipeline/1.0",
+            },
+            method="POST",
+        )
+
+        try:
+            status_code, headers, body_text = effective_transport(request, timeout)
+        except Exception as exc:
+            safe_msg = _redact_secrets(str(exc))
+            raise GeminiClientError(f"Structured-output preflight network transport error: {safe_msg}") from exc
+
+        if status_code != 200:
+            safe_body = _redact_secrets(body_text[:200])
+            if status_code in (401, 403):
+                raise GeminiAuthError(f"Preflight auth failure during structured output probe (HTTP {status_code}).")
+            if status_code == 400:
+                raise GeminiModelConfigError(
+                    f"Model '{model_id}' rejected structured output configuration (HTTP 400): {safe_body}"
+                )
+            raise GeminiClientError(f"Structured output preflight probe failed (HTTP {status_code}): {safe_body}")
+
+    return model_metadata
 
 
 def parse_retry_after(header_val: Optional[str], default_delay: float, max_delay: float) -> float:
@@ -241,6 +320,19 @@ class GeminiClient:
             api_key=self.config.api_key or "",
             transport=self.transport,
             timeout=self.config.timeout_seconds,
+        )
+
+    def run_preflight(self, verify_structured_output: bool = True) -> Dict[str, Any]:
+        """
+        Runs comprehensive preflight verification prior to transcript extraction.
+        Asserts model existence, generateContent support, and structured output support.
+        """
+        return verify_model_preflight(
+            model_id=self.config.model_id,
+            api_key=self.config.api_key or "",
+            transport=self.transport,
+            timeout=self.config.timeout_seconds,
+            verify_structured_output=verify_structured_output,
         )
 
     def build_prompt_payload(self, chunks: List[TranscriptChunk], schema_json_str: Optional[str] = None) -> Dict[str, Any]:

@@ -4,6 +4,7 @@ Tests configurable model IDs, mock transport, bounded retries, Retry-After heade
 rate limiting vs. quota exhaustion distinction, and immediate rejection of non-retryable errors.
 """
 
+import json
 import os
 import unittest
 import urllib.request
@@ -19,10 +20,12 @@ from backend.src.gemini_client import (
     GeminiRetryExhaustedError,
     GeminiServiceUnavailableError,
     GeminiTimeoutError,
+    _redact_secrets,
     check_model_availability,
     parse_retry_after,
     validate_model_id_syntax,
     verify_model_configuration,
+    verify_model_preflight,
 )
 from backend.src.models import TranscriptChunk
 
@@ -338,6 +341,104 @@ class TestGeminiClient(unittest.TestCase):
 
         with self.assertRaises(GeminiAuthError):
             client.check_availability()
+
+    def test_verify_model_preflight_success_with_structured_output(self) -> None:
+        """Verifies preflight confirms both model existence and structured output support."""
+        model_metadata_json = """{
+            "name": "models/gemini-2.0-flash",
+            "displayName": "Gemini 2.0 Flash",
+            "supportedGenerationMethods": ["generateContent"]
+        }"""
+        probe_response_json = """{
+            "candidates": [{"content": {"parts": [{"text": "{\\"status\\": \\"ok\\"}"}]}}]
+        }"""
+
+        calls = []
+
+        def mock_transport(req: urllib.request.Request, timeout: float):
+            calls.append(req.get_method())
+            if req.get_method() == "GET":
+                return 200, {}, model_metadata_json
+            elif req.get_method() == "POST":
+                # Verify structured output payload was requested
+                req_data = json.loads(req.data.decode("utf-8"))
+                self.assertEqual(req_data["generationConfig"]["responseMimeType"], "application/json")
+                return 200, {}, probe_response_json
+            return 500, {}, "Unknown"
+
+        meta = verify_model_preflight(
+            model_id="gemini-2.0-flash",
+            api_key="secret-key-12345",
+            transport=mock_transport,
+            verify_structured_output=True,
+        )
+
+        self.assertEqual(meta["displayName"], "Gemini 2.0 Flash")
+        self.assertEqual(calls, ["GET", "POST"])
+
+    def test_verify_model_preflight_rejects_unsupported_structured_output(self) -> None:
+        """Verifies preflight fails if the model rejects structured output (HTTP 400)."""
+        model_metadata_json = """{
+            "name": "models/gemini-legacy",
+            "supportedGenerationMethods": ["generateContent"]
+        }"""
+
+        def mock_transport(req: urllib.request.Request, timeout: float):
+            if req.get_method() == "GET":
+                return 200, {}, model_metadata_json
+            return 400, {}, '{"error": {"message": "Structured output not supported"}}'
+
+        with self.assertRaises(GeminiModelConfigError) as ctx:
+            verify_model_preflight(
+                model_id="gemini-legacy",
+                api_key="secret-key-12345",
+                transport=mock_transport,
+                verify_structured_output=True,
+            )
+        self.assertIn("rejected structured output configuration", str(ctx.exception))
+
+    def test_run_preflight_method_on_client(self) -> None:
+        """Verifies client.run_preflight() delegates cleanly to verify_model_preflight."""
+        model_metadata_json = """{
+            "name": "models/gemini-2.0-flash",
+            "supportedGenerationMethods": ["generateContent"]
+        }"""
+        probe_response_json = '{"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}'
+
+        def mock_transport(req: urllib.request.Request, timeout: float):
+            if req.get_method() == "GET":
+                return 200, {}, model_metadata_json
+            return 200, {}, probe_response_json
+
+        client = GeminiClient(
+            config=GeminiConfig(model_id="gemini-2.0-flash", api_key="secret-key"),
+            transport=mock_transport,
+        )
+        meta = client.run_preflight()
+        self.assertIn("generateContent", meta["supportedGenerationMethods"])
+
+    def test_api_key_never_logged_or_exposed_in_exceptions(self) -> None:
+        """Verifies that API keys are strictly redacted in any transport errors or URL logs."""
+        raw_key = "super-secret-api-key-99999"
+
+        # Test URL redaction helper directly
+        raw_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash?key={raw_key}&other=val"
+        redacted = _redact_secrets(raw_url)
+        self.assertNotIn(raw_key, redacted)
+        self.assertIn("key=[REDACTED]", redacted)
+
+        # Test transport error redaction
+        def mock_failing_transport(req: urllib.request.Request, timeout: float):
+            raise urllib.error.URLError(f"Connection failed to {req.full_url}")
+
+        with self.assertRaises(Exception) as ctx:
+            check_model_availability(
+                model_id="gemini-2.0-flash",
+                api_key=raw_key,
+                transport=mock_failing_transport,
+            )
+        self.assertNotIn(raw_key, str(ctx.exception))
+        self.assertIn("[REDACTED]", str(ctx.exception))
 
 
 if __name__ == "__main__":

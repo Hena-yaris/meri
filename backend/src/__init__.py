@@ -2,6 +2,11 @@
 Meri Content Pipeline v1: Transcript Ingestion, Normalization, Chunking & Candidate Extraction Engine.
 """
 
+from .candidate_persistence import (
+    CandidatePersistenceService,
+    CrossEpisodeIntegrityError,
+    EditorialAuthorizationError,
+)
 from .chunker import TranscriptChunker, estimate_token_count, format_chunk_text
 from .extraction_models import (
     CandidateEvidenceReference,
@@ -10,6 +15,7 @@ from .extraction_models import (
     CandidateInsight,
     CandidateMilestone,
     CandidateQuotation,
+    CandidateQuotationSegment,
     CandidateSummary,
     ExtractionRunRecord,
     ValidationErrorCode,
@@ -30,10 +36,12 @@ from .gemini_client import (
     GeminiRetryExhaustedError,
     GeminiServiceUnavailableError,
     GeminiTimeoutError,
+    _redact_secrets,
     check_model_availability,
     parse_retry_after,
     validate_model_id_syntax,
     verify_model_configuration,
+    verify_model_preflight,
 )
 from .models import (
     InvalidTimestampError,
@@ -92,9 +100,14 @@ __all__ = [
     "CandidateMilestone",
     "CandidateInsight",
     "CandidateQuotation",
+    "CandidateQuotationSegment",
     "CandidateEvidenceReference",
     "CandidateExtractionPayload",
     "ExtractionRunRecord",
+    # Candidate Persistence & Editorial Boundaries (Milestone 3)
+    "CandidatePersistenceService",
+    "EditorialAuthorizationError",
+    "CrossEpisodeIntegrityError",
     # Gemini Client
     "GeminiClient",
     "GeminiConfig",
@@ -110,6 +123,8 @@ __all__ = [
     "validate_model_id_syntax",
     "verify_model_configuration",
     "check_model_availability",
+    "verify_model_preflight",
+    "_redact_secrets",
     "parse_retry_after",
     # Validators & Orchestration
     "SyntacticValidator",

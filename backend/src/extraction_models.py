@@ -238,6 +238,30 @@ class CandidateEvidenceReference:
         return payload
 
 
+@dataclass(frozen=True)
+class CandidateQuotationSegment:
+    """
+    Relational provenance linkage connecting a quotation to a source transcript segment
+    with deterministic sequence ordering.
+    Strictly conforms to PostgreSQL table: quotation_segments (Milestone 3).
+    """
+    quotation_index: int
+    segment_index: int
+    sequence_order: int
+
+    def to_db_dict(
+        self, quotation_id: Optional[str] = None, segment_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "sequence_order": self.sequence_order,
+        }
+        if quotation_id:
+            payload["quotation_id"] = quotation_id
+        if segment_id:
+            payload["segment_id"] = segment_id
+        return payload
+
+
 @dataclass
 class CandidateExtractionPayload:
     """Complete structured candidate extraction payload."""
@@ -249,6 +273,7 @@ class CandidateExtractionPayload:
     quotations: List[CandidateQuotation]
     suggested_tags: List[str]
     evidence_references: List[CandidateEvidenceReference] = field(default_factory=list)
+    quotation_segments: List[CandidateQuotationSegment] = field(default_factory=list)
 
 
 @dataclass

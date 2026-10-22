@@ -197,6 +197,15 @@ class TestSemanticValidator(unittest.TestCase):
         self.assertEqual(payload.quotations[0].canonical_timestamp_seconds, 16)
         self.assertEqual(payload.quotations[0].source_segment_indices, [3, 4])
 
+        # Assert quotation_segments relational linkages with sequence ordering (Milestone 3)
+        self.assertEqual(len(payload.quotation_segments), 2)
+        self.assertEqual(payload.quotation_segments[0].quotation_index, 0)
+        self.assertEqual(payload.quotation_segments[0].segment_index, 3)
+        self.assertEqual(payload.quotation_segments[0].sequence_order, 0)
+        self.assertEqual(payload.quotation_segments[1].quotation_index, 0)
+        self.assertEqual(payload.quotation_segments[1].segment_index, 4)
+        self.assertEqual(payload.quotation_segments[1].sequence_order, 1)
+
     def test_cross_segment_quotation_non_contiguous_rejection(self) -> None:
         """Rejects cross-segment quote that references non-contiguous segment indices."""
         data = json.loads(json.dumps(self.valid_data))

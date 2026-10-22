@@ -20,6 +20,7 @@ from .extraction_models import (
     CandidateInsight,
     CandidateMilestone,
     CandidateQuotation,
+    CandidateQuotationSegment,
     CandidateSummary,
     ValidationErrorCode,
     ValidationErrorItem,
@@ -190,6 +191,7 @@ class SemanticEvidenceValidator:
         # 5. Quotations (Exact Verbatim & Timestamp Grounding)
         quotations_raw = data.get("quotations", [])
         candidate_quotations: List[CandidateQuotation] = []
+        quotation_segments: List[CandidateQuotationSegment] = []
         valid_quote_count = 0
 
         for q_idx, q_raw in enumerate(quotations_raw):
@@ -239,6 +241,16 @@ class SemanticEvidenceValidator:
                     canonical_start_ms = 0
                     canonical_seconds = 0
                 else:
+                    # Record relational provenance segments with deterministic sequence ordering
+                    for seq_order, seg_idx in enumerate(indices):
+                        quotation_segments.append(
+                            CandidateQuotationSegment(
+                                quotation_index=q_idx,
+                                segment_index=seg_idx,
+                                sequence_order=seq_order,
+                            )
+                        )
+
                     # Check cross-segment contiguity
                     if len(indices) > 1:
                         sorted_indices = sorted(indices)
@@ -339,6 +351,7 @@ class SemanticEvidenceValidator:
             quotations=candidate_quotations,
             suggested_tags=candidate_tags,
             evidence_references=evidence_references,
+            quotation_segments=quotation_segments,
         )
 
         # 7. Compute ValidationStatus

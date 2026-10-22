@@ -6,9 +6,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-MIGRATION_FILE="${ROOT_DIR}/supabase/migrations/20261020000001_content_pipeline_foundation.sql"
+MIGRATIONS_DIR="${ROOT_DIR}/supabase/migrations"
 BOOTSTRAP_FILE="${ROOT_DIR}/backend/tests/local_test_bootstrap.sql"
 TEST_SQL_FILE="${ROOT_DIR}/backend/tests/verify_database_foundation.sql"
+TEST_M3_SQL_FILE="${ROOT_DIR}/backend/tests/verify_milestone3_boundaries.sql"
 
 # Configuration defaults
 CONTAINER_NAME="${CONTAINER_NAME:-leyu_postgres}"
@@ -76,11 +77,18 @@ run_raw_cmd "CREATE DATABASE ${TEMP_DB};"
 echo "[2/4] Bootstrapping local test roles & auth stubs (Docker only)..."
 run_sql_cmd "${TEMP_DB}" "${BOOTSTRAP_FILE}" >/dev/null
 
-echo "[3/4] Applying Supabase migration: $(basename "${MIGRATION_FILE}")..."
-run_sql_cmd "${TEMP_DB}" "${MIGRATION_FILE}" >/dev/null
+echo "[3/4] Applying Supabase migrations in order..."
+for mig in $(ls "${MIGRATIONS_DIR}"/*.sql | sort); do
+    echo "       Applying: $(basename "${mig}")..."
+    run_sql_cmd "${TEMP_DB}" "${mig}" >/dev/null
+done
 
-echo "[4/4] Running 9 verification test scenarios..."
+echo "[4/4] Running Database Verification Test Suites..."
+echo "       Suite 1: Foundation Verification (9 tests)..."
 run_sql_cmd "${TEMP_DB}" "${TEST_SQL_FILE}"
+
+echo "       Suite 2: Milestone 3 Boundaries & Provenance (11 tests)..."
+run_sql_cmd "${TEMP_DB}" "${TEST_M3_SQL_FILE}"
 
 echo "============================================================================="
 echo "Verification run completed successfully."

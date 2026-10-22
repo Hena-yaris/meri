@@ -15,6 +15,7 @@ void main() {
     late String publishedEpisodePayloadString;
     late Map<String, dynamic> publishedEpisodeMap;
     late String migrationSqlString;
+    late String m3MigrationSqlString;
 
     setUpAll(() {
       final schemaFile =
@@ -53,6 +54,12 @@ void main() {
       expect(migrationFile.existsSync(), isTrue,
           reason: 'Supabase Cloud migration file must exist in supabase/migrations/');
       migrationSqlString = migrationFile.readAsStringSync();
+
+      final m3MigrationFile = File(
+          'supabase/migrations/20261022000001_quotation_provenance_and_editorial_boundary.sql');
+      expect(m3MigrationFile.existsSync(), isTrue,
+          reason: 'Milestone 3 migration file must exist in supabase/migrations/');
+      m3MigrationSqlString = m3MigrationFile.readAsStringSync();
     });
 
     // =========================================================================
@@ -440,6 +447,81 @@ void main() {
       expect(migratedBookmarks, contains(uuid));
       expect(migratedBookmarks.contains('ep-101'), isFalse);
       expect(isEpisodeBookmarked(episode, migratedBookmarks), isTrue);
+    });
+
+    // =========================================================================
+    // 8. Milestone 3 Quotation Provenance & Editorial Boundary Migration Tests
+    // =========================================================================
+    test('Milestone 3 migration defines relational quotation_segments, triggers, and review RPC', () {
+      // 1. Relational join table quotation_segments
+      expect(
+        m3MigrationSqlString.contains('CREATE TABLE IF NOT EXISTS quotation_segments'),
+        isTrue,
+        reason: 'Migration must create quotation_segments relational join table',
+      );
+      expect(
+        m3MigrationSqlString.contains('CONSTRAINT uq_quotation_segment UNIQUE (quotation_id, segment_id)'),
+        isTrue,
+        reason: 'Migration must enforce unique quotation/segment associations',
+      );
+      expect(
+        m3MigrationSqlString.contains('CONSTRAINT uq_quotation_sequence_order UNIQUE (quotation_id, sequence_order)'),
+        isTrue,
+        reason: 'Migration must enforce unique sequence positions per quotation',
+      );
+
+      // 2. Cross-episode referential integrity triggers
+      expect(
+        m3MigrationSqlString.contains('CREATE OR REPLACE FUNCTION check_quotation_segment_same_episode'),
+        isTrue,
+        reason: 'Migration must validate all linked segments belong to same episode as quotation',
+      );
+      expect(
+        m3MigrationSqlString.contains('CREATE OR REPLACE FUNCTION check_quotation_starting_segment_same_episode'),
+        isTrue,
+        reason: 'Migration must validate starting segment anchor belongs to same episode as quotation',
+      );
+
+      // 3. Safe backfill for pre-existing records
+      expect(
+        m3MigrationSqlString.contains('INSERT INTO quotation_segments (quotation_id, segment_id, sequence_order)'),
+        isTrue,
+        reason: 'Migration must safely backfill existing quotations into quotation_segments',
+      );
+
+      // 4. Server-side authorized review RPC function
+      expect(
+        m3MigrationSqlString.contains('CREATE OR REPLACE FUNCTION review_candidate_item'),
+        isTrue,
+        reason: 'Migration must provide review_candidate_item server-side RPC function',
+      );
+      expect(
+        m3MigrationSqlString.contains('SET search_path = public, auth, pg_temp'),
+        isTrue,
+        reason: 'review_candidate_item must pin search_path',
+      );
+
+      // 5. RLS & Permissions
+      expect(
+        m3MigrationSqlString.contains('ALTER TABLE quotation_segments ENABLE ROW LEVEL SECURITY;'),
+        isTrue,
+        reason: 'quotation_segments must have Row Level Security enabled',
+      );
+      expect(
+        m3MigrationSqlString.contains('REVOKE ALL ON quotation_segments FROM anon, PUBLIC;'),
+        isTrue,
+        reason: 'quotation_segments must be private from anon and public',
+      );
+      expect(
+        m3MigrationSqlString.contains('REVOKE ALL ON FUNCTION review_candidate_item(TEXT, UUID, TEXT, UUID) FROM anon;'),
+        isTrue,
+        reason: 'review_candidate_item must be revoked from anon',
+      );
+      expect(
+        m3MigrationSqlString.contains('GRANT EXECUTE ON FUNCTION review_candidate_item(TEXT, UUID, TEXT, UUID) TO authenticated, service_role;'),
+        isTrue,
+        reason: 'review_candidate_item must be granted to authenticated and service_role',
+      );
     });
   });
 }
