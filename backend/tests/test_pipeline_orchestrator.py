@@ -83,6 +83,7 @@ class MockDbCursor:
     def __init__(self, connection: "MockDbConnection") -> None:
         self.connection = connection
         self.last_returning_row: Optional[Tuple[Any, ...]] = None
+        self.last_returning_rows: List[Tuple[Any, ...]] = []
 
     def execute(self, query: str, params: Optional[Tuple[Any, ...]] = None) -> None:
         clean_q = " ".join(query.strip().split())
@@ -93,12 +94,35 @@ class MockDbCursor:
             raise RuntimeError(f"Simulated database error on query: {clean_q[:60]}")
 
         # 1. Episodes publication status query
-        if "SELECT publication_status FROM episodes" in clean_q:
+        if "FROM episodes" in clean_q:
             ep_id = params[0] if params else None
-            ep_data = self.connection.episodes.get(ep_id, {"publication_status": "draft"})
-            self.last_returning_row = (ep_data["publication_status"],)
+            if ep_id not in self.connection.episodes:
+                self.last_returning_row = None
+            else:
+                ep_data = self.connection.episodes[ep_id]
+                self.last_returning_row = (
+                    ep_data.get("publication_status", "draft"),
+                    ep_data.get("youtube_video_id", "dQw4w9WgXcQ"),
+                )
 
-        # 2. Reviewed items count (verified or rejected)
+        # 2a. Locked child items (FOR UPDATE)
+        elif "FROM insights WHERE episode_id = %s FOR UPDATE" in clean_q:
+            ep_id = params[0] if params else None
+            self.last_returning_rows = [
+                (ins["id"], ins.get("review_status", "candidate"))
+                for ins in self.connection.insights
+                if ins["episode_id"] == ep_id
+            ]
+
+        elif "FROM quotations WHERE episode_id = %s FOR UPDATE" in clean_q:
+            ep_id = params[0] if params else None
+            self.last_returning_rows = [
+                (q["id"], q.get("review_status", "candidate"))
+                for q in self.connection.quotations
+                if q["episode_id"] == ep_id
+            ]
+
+        # 2b. Reviewed items count (verified or rejected)
         elif "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status !=" in clean_q:
             ep_id = params[0] if params else None
             count = sum(
@@ -317,9 +341,16 @@ class MockDbCursor:
                 })
 
     def fetchone(self) -> Optional[Tuple[Any, ...]]:
+        if self.last_returning_rows:
+            return self.last_returning_rows.pop(0)
         row = self.last_returning_row
         self.last_returning_row = None
         return row
+
+    def fetchall(self) -> List[Tuple[Any, ...]]:
+        rows = list(self.last_returning_rows)
+        self.last_returning_rows = []
+        return rows
 
     def close(self) -> None:
         self.connection.timeline.append("cursor_close")
@@ -339,7 +370,11 @@ class MockDbConnection:
         self.transaction_status = 0  # 0: IDLE, 2: INTRANS
 
         self.episodes: Dict[str, Dict[str, Any]] = {
-            "ep-uuid-test": {"id": "ep-uuid-test", "publication_status": "draft"}
+            "ep-uuid-test": {
+                "id": "ep-uuid-test",
+                "publication_status": "draft",
+                "youtube_video_id": "dQw4w9WgXcQ",
+            }
         }
         self.transcript_segments: List[Dict[str, Any]] = []
         self.transcript_chunks: List[Dict[str, Any]] = []
@@ -1225,6 +1260,245 @@ class TestPipelineOrchestrator(unittest.TestCase):
                 connection=MockTxConn(),
             )
         self.assertIn("active, uncommitted transaction", str(ctx.exception))
+
+    # =========================================================================
+    # Test 14: Pre-Gemini Editorial Preflight Checks (Milestone 5.2)
+    # =========================================================================
+    def test_preflight_draft_episode_no_prior_data_passes(self) -> None:
+        """Draft episode with no existing segments, chunks, or reviewed items passes preflight cleanly."""
+        cur = self.db_conn.cursor()
+        res = PipelineOrchestrator.check_editorial_preflight(
+            cur,
+            episode_id=self.episode_id,
+            allow_candidate_rerun=False,
+            expected_youtube_video_id="dQw4w9WgXcQ",
+        )
+        self.assertFalse(res["has_unreviewed_data"])
+
+    def test_preflight_published_episode_rejected(self) -> None:
+        """Published episode is strictly rejected during preflight."""
+        self.db_conn.episodes[self.episode_id] = {
+            "id": self.episode_id,
+            "publication_status": "published",
+            "youtube_video_id": "dQw4w9WgXcQ",
+        }
+        cur = self.db_conn.cursor()
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id=self.episode_id,
+                allow_candidate_rerun=False,
+            )
+        self.assertIn("already published", str(ctx.exception))
+
+    def test_preflight_verified_or_rejected_content_rejected(self) -> None:
+        """Episodes with verified or rejected items are strictly rejected during preflight."""
+        for status in ["verified", "rejected"]:
+            with self.subTest(status=status):
+                self.db_conn.insights = [{
+                    "id": f"ins-{status}-01",
+                    "episode_id": self.episode_id,
+                    "title": f"Test {status} insight",
+                    "review_status": status,
+                }]
+                cur = self.db_conn.cursor()
+                with self.assertRaises(EditorialProtectionError) as ctx:
+                    PipelineOrchestrator.check_editorial_preflight(
+                        cur,
+                        episode_id=self.episode_id,
+                        allow_candidate_rerun=False,
+                    )
+                self.assertIn("verified/reviewed", str(ctx.exception))
+
+    def test_preflight_unreviewed_data_rejected_without_rerun_flag(self) -> None:
+        """Episodes with unreviewed candidate data are rejected if allow_candidate_rerun is False."""
+        self.db_conn.transcript_segments = [{
+            "id": "seg-1",
+            "episode_id": self.episode_id,
+            "segment_index": 0,
+        }]
+        cur = self.db_conn.cursor()
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id=self.episode_id,
+                allow_candidate_rerun=False,
+            )
+        self.assertIn("Reruns must explicitly enable allow_candidate_rerun", str(ctx.exception))
+
+    def test_preflight_unreviewed_data_passes_with_rerun_flag(self) -> None:
+        """Episodes with unreviewed candidate data pass preflight when allow_candidate_rerun is True."""
+        self.db_conn.transcript_segments = [{
+            "id": "seg-1",
+            "episode_id": self.episode_id,
+            "segment_index": 0,
+        }]
+        cur = self.db_conn.cursor()
+        res = PipelineOrchestrator.check_editorial_preflight(
+            cur,
+            episode_id=self.episode_id,
+            allow_candidate_rerun=True,
+        )
+        self.assertTrue(res["has_unreviewed_data"])
+
+    def test_preflight_allow_rerun_cannot_bypass_published_or_reviewed_content(self) -> None:
+        """--allow-rerun cannot bypass protections for published or human-reviewed episodes."""
+        cur = self.db_conn.cursor()
+
+        # 1. Published episode with allow_candidate_rerun=True
+        self.db_conn.episodes[self.episode_id] = {
+            "id": self.episode_id,
+            "publication_status": "published",
+            "youtube_video_id": "dQw4w9WgXcQ",
+        }
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id=self.episode_id,
+                allow_candidate_rerun=True,
+            )
+        self.assertIn("already published", str(ctx.exception))
+
+        # 2. Reset to draft, but add verified insight with allow_candidate_rerun=True
+        self.db_conn.episodes[self.episode_id]["publication_status"] = "draft"
+        self.db_conn.insights = [{
+            "id": "ins-verified-01",
+            "episode_id": self.episode_id,
+            "title": "Verified Insight",
+            "review_status": "verified",
+        }]
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id=self.episode_id,
+                allow_candidate_rerun=True,
+            )
+        self.assertIn("verified/reviewed", str(ctx.exception))
+
+    def test_preflight_youtube_video_id_mismatch_rejected(self) -> None:
+        """Mismatched expected YouTube video ID is rejected before Gemini."""
+        cur = self.db_conn.cursor()
+        with self.assertRaises(PipelineInputError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id=self.episode_id,
+                allow_candidate_rerun=False,
+                expected_youtube_video_id="WRONG_VID_ID",
+            )
+        self.assertIn("does not match episode YouTube video ID", str(ctx.exception))
+
+    def test_preflight_nonexistent_episode_rejected(self) -> None:
+        """Episode ID that does not exist in the database is rejected."""
+        cur = self.db_conn.cursor()
+        with self.assertRaises(PipelineInputError) as ctx:
+            PipelineOrchestrator.check_editorial_preflight(
+                cur,
+                episode_id="non-existent-ep-uuid",
+                allow_candidate_rerun=False,
+            )
+        self.assertIn("does not exist in the database", str(ctx.exception))
+
+    # =========================================================================
+    # Test 15: Concurrency & Lock Order in Orchestrator Persistence (Milestone 5.2.2)
+    # =========================================================================
+    def test_orchestrator_run_with_matching_expected_youtube_video_id_succeeds(self) -> None:
+        """Matching expected_youtube_video_id passes persistence check and commits."""
+        gemini_client = self._build_mock_gemini_client()
+        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        result = orchestrator.run(
+            job_id=self.job_id,
+            episode_id=self.episode_id,
+            transcript_content=self.transcript_json_str,
+            connection=self.db_conn,
+            expected_youtube_video_id="dQw4w9WgXcQ",
+        )
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(self.db_conn.commit_count, 1)
+
+    def test_orchestrator_run_with_mismatched_expected_youtube_video_id_rejected_and_rolled_back(self) -> None:
+        """Mismatched expected_youtube_video_id raises PipelineInputError and rolls back."""
+        gemini_client = self._build_mock_gemini_client()
+        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        with self.assertRaises(PipelineInputError) as ctx:
+            orchestrator.run(
+                job_id=self.job_id,
+                episode_id=self.episode_id,
+                transcript_content=self.transcript_json_str,
+                connection=self.db_conn,
+                expected_youtube_video_id="WRONG_VID_999",
+            )
+        self.assertIn("does not match episode YouTube video ID", str(ctx.exception))
+        self.assertEqual(self.db_conn.rollback_count, 1)
+        self.assertEqual(self.db_conn.commit_count, 0)
+
+    def test_orchestrator_run_persistence_enforces_hierarchical_for_update_locks(self) -> None:
+        """Persistence transaction executes FOR UPDATE locks on episodes and child candidate items."""
+        gemini_client = self._build_mock_gemini_client()
+        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        result = orchestrator.run(
+            job_id=self.job_id,
+            episode_id=self.episode_id,
+            transcript_content=self.transcript_json_str,
+            connection=self.db_conn,
+            expected_youtube_video_id="dQw4w9WgXcQ",
+        )
+        self.assertEqual(result.status, "completed")
+
+        executed_query_strings = [q for q, _ in self.db_conn.executed_queries]
+        # Level 1: Episodes locked FOR UPDATE
+        has_episode_lock = any("FROM episodes WHERE id = %s FOR UPDATE" in q for q in executed_query_strings)
+        self.assertTrue(has_episode_lock, "Expected FOR UPDATE lock on episodes table during persistence.")
+
+        # Level 2: Insights locked FOR UPDATE
+        has_insights_lock = any("FROM insights WHERE episode_id = %s FOR UPDATE" in q for q in executed_query_strings)
+        self.assertTrue(has_insights_lock, "Expected FOR UPDATE lock on insights table during persistence.")
+
+        # Level 3: Quotations locked FOR UPDATE
+        has_quotations_lock = any("FROM quotations WHERE episode_id = %s FOR UPDATE" in q for q in executed_query_strings)
+        self.assertTrue(has_quotations_lock, "Expected FOR UPDATE lock on quotations table during persistence.")
+
+    def test_orchestrator_run_persistence_protects_published_episode_with_rollback(self) -> None:
+        """Episode marked published triggers EditorialProtectionError and rolls back in persistence."""
+        self.db_conn.episodes[self.episode_id] = {
+            "id": self.episode_id,
+            "publication_status": "published",
+            "youtube_video_id": "dQw4w9WgXcQ",
+        }
+        gemini_client = self._build_mock_gemini_client()
+        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            orchestrator.run(
+                job_id=self.job_id,
+                episode_id=self.episode_id,
+                transcript_content=self.transcript_json_str,
+                connection=self.db_conn,
+                allow_candidate_rerun=True,
+            )
+        self.assertIn("already published", str(ctx.exception))
+        self.assertEqual(self.db_conn.rollback_count, 1)
+        self.assertEqual(self.db_conn.commit_count, 0)
+
+    def test_orchestrator_run_persistence_protects_reviewed_content_with_rollback(self) -> None:
+        """Episode with reviewed insights triggers EditorialProtectionError and rolls back in persistence."""
+        self.db_conn.insights = [{
+            "id": "ins-verified-01",
+            "episode_id": self.episode_id,
+            "title": "Verified Insight",
+            "review_status": "verified",
+        }]
+        gemini_client = self._build_mock_gemini_client()
+        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        with self.assertRaises(EditorialProtectionError) as ctx:
+            orchestrator.run(
+                job_id=self.job_id,
+                episode_id=self.episode_id,
+                transcript_content=self.transcript_json_str,
+                connection=self.db_conn,
+                allow_candidate_rerun=True,
+            )
+        self.assertIn("verified/reviewed", str(ctx.exception))
+        self.assertEqual(self.db_conn.rollback_count, 1)
+        self.assertEqual(self.db_conn.commit_count, 0)
 
 
 if __name__ == "__main__":

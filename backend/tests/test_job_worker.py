@@ -50,6 +50,13 @@ class MockWorkerCursor:
     def __init__(self, connection: "MockWorkerDbConnection") -> None:
         self.connection = connection
         self.last_returning_row: Optional[Tuple[Any, ...]] = None
+        self.last_returning_rows: List[Tuple[Any, ...]] = []
+
+    def __enter__(self) -> "MockWorkerCursor":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
 
     def execute(self, query: str, params: Optional[Union[Tuple[Any, ...], List[Any]]] = None) -> None:
         clean_q = " ".join(query.strip().split())
@@ -59,8 +66,81 @@ class MockWorkerCursor:
         if self.connection.fail_on_query_substring and self.connection.fail_on_query_substring in clean_q:
             raise RuntimeError(f"Simulated database failure on query: {clean_q[:60]}")
 
+        # 0. Episodes preflight query
+        if "FROM episodes" in clean_q:
+            ep_id = params[0] if params else None
+            if ep_id not in self.connection.episodes:
+                self.last_returning_row = None
+            else:
+                ep_data = self.connection.episodes[ep_id]
+                self.last_returning_row = (
+                    ep_data.get("publication_status", "draft"),
+                    ep_data.get("youtube_video_id", "sample101"),
+                )
+
+        # Locked child items (FOR UPDATE)
+        elif "FROM insights WHERE episode_id = %s FOR UPDATE" in clean_q:
+            ep_id = params[0] if params else None
+            self.last_returning_rows = [
+                (ins["id"], ins.get("review_status", "candidate"))
+                for ins in self.connection.insights
+                if ins["episode_id"] == ep_id
+            ]
+
+        elif "FROM quotations WHERE episode_id = %s FOR UPDATE" in clean_q:
+            ep_id = params[0] if params else None
+            self.last_returning_rows = [
+                (q["id"], q.get("review_status", "candidate"))
+                for q in self.connection.quotations
+                if q["episode_id"] == ep_id
+            ]
+
+        # Reviewed items count (verified or rejected)
+        elif "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status !=" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(
+                1 for ins in self.connection.insights
+                if ins["episode_id"] == ep_id and ins.get("review_status") != "candidate"
+            )
+            self.last_returning_row = (count,)
+
+        elif "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status !=" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(
+                1 for q in self.connection.quotations
+                if q["episode_id"] == ep_id and q.get("review_status") != "candidate"
+            )
+            self.last_returning_row = (count,)
+
+        # Existing unreviewed counts
+        elif "SELECT count(*) FROM transcript_segments WHERE episode_id = %s" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(1 for seg in self.connection.transcript_segments if seg["episode_id"] == ep_id)
+            self.last_returning_row = (count,)
+
+        elif "SELECT count(*) FROM transcript_chunks WHERE episode_id = %s" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(1 for chk in self.connection.transcript_chunks if chk["episode_id"] == ep_id)
+            self.last_returning_row = (count,)
+
+        elif "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status = 'candidate'" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(
+                1 for ins in self.connection.insights
+                if ins["episode_id"] == ep_id and ins.get("review_status") == "candidate"
+            )
+            self.last_returning_row = (count,)
+
+        elif "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status = 'candidate'" in clean_q:
+            ep_id = params[0] if params else None
+            count = sum(
+                1 for q in self.connection.quotations
+                if q["episode_id"] == ep_id and q.get("review_status") == "candidate"
+            )
+            self.last_returning_row = (count,)
+
         # 1. Claim next pending job query (WITH claimable AS ... FOR UPDATE SKIP LOCKED)
-        if "ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1" in clean_q:
+        elif "ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1" in clean_q:
             # Find first job with status == 'pending' that is not currently locked
             claimed_job = None
             for job in self.connection.jobs:
@@ -169,7 +249,16 @@ class MockWorkerCursor:
                     break
 
     def fetchone(self) -> Optional[Tuple[Any, ...]]:
-        return self.last_returning_row
+        if self.last_returning_rows:
+            return self.last_returning_rows.pop(0)
+        row = self.last_returning_row
+        self.last_returning_row = None
+        return row
+
+    def fetchall(self) -> List[Tuple[Any, ...]]:
+        rows = list(self.last_returning_rows)
+        self.last_returning_rows = []
+        return rows
 
     def close(self) -> None:
         pass
@@ -178,11 +267,59 @@ class MockWorkerCursor:
 class MockWorkerDbConnection:
     """Mock connection maintaining state across worker operations."""
 
-    def __init__(self, jobs: Optional[List[Dict[str, Any]]] = None, shared_state: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        jobs: Optional[List[Dict[str, Any]]] = None,
+        shared_state: Optional[Dict[str, Any]] = None,
+        episodes: Optional[Dict[str, Dict[str, Any]]] = None,
+        insights: Optional[List[Dict[str, Any]]] = None,
+        quotations: Optional[List[Dict[str, Any]]] = None,
+        transcript_segments: Optional[List[Dict[str, Any]]] = None,
+        transcript_chunks: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
         self.jobs = jobs if jobs is not None else []
-        self.shared_state = shared_state or {"timeline": [], "locked_job_ids": set()}
+        self.shared_state = shared_state or {
+            "timeline": [],
+            "locked_job_ids": set(),
+            "episodes": {"ep-uuid-101": {"publication_status": "draft", "youtube_video_id": "sample101"}},
+            "insights": [],
+            "quotations": [],
+            "transcript_segments": [],
+            "transcript_chunks": [],
+        }
         self.timeline: List[str] = self.shared_state["timeline"]
         self.locked_job_ids = self.shared_state["locked_job_ids"]
+
+        if episodes is not None:
+            self.shared_state["episodes"] = episodes
+        elif "episodes" not in self.shared_state:
+            self.shared_state["episodes"] = {"ep-uuid-101": {"publication_status": "draft", "youtube_video_id": "sample101"}}
+        self.episodes = self.shared_state["episodes"]
+
+        if insights is not None:
+            self.shared_state["insights"] = insights
+        elif "insights" not in self.shared_state:
+            self.shared_state["insights"] = []
+        self.insights = self.shared_state["insights"]
+
+        if quotations is not None:
+            self.shared_state["quotations"] = quotations
+        elif "quotations" not in self.shared_state:
+            self.shared_state["quotations"] = []
+        self.quotations = self.shared_state["quotations"]
+
+        if transcript_segments is not None:
+            self.shared_state["transcript_segments"] = transcript_segments
+        elif "transcript_segments" not in self.shared_state:
+            self.shared_state["transcript_segments"] = []
+        self.transcript_segments = self.shared_state["transcript_segments"]
+
+        if transcript_chunks is not None:
+            self.shared_state["transcript_chunks"] = transcript_chunks
+        elif "transcript_chunks" not in self.shared_state:
+            self.shared_state["transcript_chunks"] = []
+        self.transcript_chunks = self.shared_state["transcript_chunks"]
+
         self.executed_queries: List[Tuple[str, Optional[Tuple[Any, ...]]]] = []
         self.commit_count = 0
         self.rollback_count = 0
@@ -214,10 +351,29 @@ class MockWorkerOrchestrator:
         timeline: Optional[List[str]] = None,
         exception_to_raise: Optional[Exception] = None,
         return_result: Optional[PipelineExecutionResult] = None,
+        preflight_exception: Optional[Exception] = None,
     ) -> None:
         self.timeline = timeline if timeline is not None else []
         self.exception_to_raise = exception_to_raise
         self.return_result = return_result
+        self.preflight_exception = preflight_exception
+
+    def check_editorial_preflight(
+        self,
+        cursor: Any,
+        episode_id: str,
+        allow_candidate_rerun: bool = False,
+        expected_youtube_video_id: Optional[str] = None,
+    ) -> None:
+        self.timeline.append(f"check_editorial_preflight: {episode_id}")
+        if self.preflight_exception:
+            raise self.preflight_exception
+        PipelineOrchestrator.check_editorial_preflight(
+            cursor,
+            episode_id=episode_id,
+            allow_candidate_rerun=allow_candidate_rerun,
+            expected_youtube_video_id=expected_youtube_video_id,
+        )
 
     def run(
         self,
@@ -226,6 +382,7 @@ class MockWorkerOrchestrator:
         transcript_content: Any,
         connection_factory: Optional[Any] = None,
         allow_candidate_rerun: bool = False,
+        expected_youtube_video_id: Optional[str] = None,
         **kwargs: Any,
     ) -> PipelineExecutionResult:
         self.timeline.append(f"orchestrator_run: {job_id}")
@@ -273,7 +430,21 @@ class TestJobWorker(unittest.TestCase):
     """Test suite verifying JobWorker claims, lifecycle, retries, and errors."""
 
     def setUp(self) -> None:
-        self.shared_state: Dict[str, Any] = {"timeline": [], "locked_job_ids": set()}
+        self.shared_state: Dict[str, Any] = {
+            "timeline": [],
+            "locked_job_ids": set(),
+            "episodes": {
+                "ep-uuid-101": {
+                    "id": "ep-uuid-101",
+                    "publication_status": "draft",
+                    "youtube_video_id": "sample101",
+                }
+            },
+            "insights": [],
+            "quotations": [],
+            "transcript_segments": [],
+            "transcript_chunks": [],
+        }
         self.sample_jobs: List[Dict[str, Any]] = [
             {
                 "id": "job-uuid-101",
@@ -592,6 +763,259 @@ class TestJobWorker(unittest.TestCase):
         self.assertFalse(result.processed)
         self.assertEqual(result.status, "idle")
         self.assertEqual(self.sample_jobs[0]["status"], "processing")
+
+    # =========================================================================
+    # Test 13: Milestone 5.2 Pre-Gemini Editorial Preflight Protections
+    # =========================================================================
+    def test_worker_preflight_published_episode_rejected_before_gemini(self) -> None:
+        """Published episode is rejected during preflight before Gemini or orchestrator.run."""
+        self.shared_state["episodes"]["ep-uuid-101"] = {
+            "publication_status": "published",
+            "youtube_video_id": "sample101",
+        }
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=self.transcript_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job()
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("already published", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "human_review")
+        # Strict temporal proof: orchestrator.run was NEVER called
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_preflight_reviewed_content_rejected_before_gemini(self) -> None:
+        """Episodes with verified or rejected items fail preflight before Gemini."""
+        for review_status in ["verified", "rejected"]:
+            with self.subTest(review_status=review_status):
+                self.sample_jobs[0]["status"] = "pending"
+                self.sample_jobs[0]["current_stage"] = "submission"
+                self.shared_state["timeline"].clear()
+                self.shared_state["insights"] = [{
+                    "id": f"ins-{review_status}-01",
+                    "episode_id": "ep-uuid-101",
+                    "title": f"Reviewed {review_status} insight",
+                    "review_status": review_status,
+                }]
+
+                orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+                worker = JobWorker(
+                    connection_factory=self._make_connection_factory(),
+                    transcript_provider=self.transcript_provider,
+                    orchestrator=orchestrator,
+                )
+
+                result = worker.process_next_job()
+
+                self.assertTrue(result.processed)
+                self.assertEqual(result.status, "failed")
+                self.assertIn("verified/reviewed", result.error or "")
+                self.assertEqual(self.sample_jobs[0]["status"], "failed")
+                self.assertEqual(self.sample_jobs[0]["current_stage"], "human_review")
+                self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_preflight_staging_data_rejected_when_rerun_false(self) -> None:
+        """Existing candidate data is rejected before Gemini when allow_candidate_rerun=False."""
+        self.shared_state["transcript_segments"] = [{
+            "id": "seg-101",
+            "episode_id": "ep-uuid-101",
+        }]
+
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=self.transcript_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(allow_candidate_rerun=False)
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("Reruns must explicitly enable allow_candidate_rerun", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "human_review")
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_preflight_allow_rerun_cannot_bypass_editorial_protection(self) -> None:
+        """--allow-rerun cannot bypass preflight protections for published or reviewed content."""
+        self.shared_state["episodes"]["ep-uuid-101"] = {
+            "publication_status": "published",
+            "youtube_video_id": "sample101",
+        }
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=self.transcript_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(allow_candidate_rerun=True)
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("already published", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "human_review")
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_persistence_protection_active_if_state_changes_after_preflight(self) -> None:
+        """Persistence-time protection inside transaction remains active if state changes after preflight."""
+        # Preflight passes normally, but orchestrator persistence triggers an EditorialProtectionError
+        # (simulating database state being modified concurrently between preflight and persistence)
+        orchestrator = MockWorkerOrchestrator(
+            timeline=self.shared_state["timeline"],
+            exception_to_raise=EditorialProtectionError("Concurrent edit: episode became published"),
+        )
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=self.transcript_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job()
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("episode became published", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "human_review")
+
+    # =========================================================================
+    # Test 14: Milestone 5.2 Transcript Identity & Operator Confirmation
+    # =========================================================================
+    def test_worker_transcript_confirmation_required_for_local_provider(self) -> None:
+        """Static transcript provider with requires_confirmation=True rejects invocation without confirmation."""
+        local_provider = StaticTranscriptProvider(
+            default_content="1\n00:00:00,000 --> 00:00:05,000\nሙከራ\n",
+            requires_confirmation=True,
+        )
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=local_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id=None)
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("--confirm-youtube-video-id", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "submission")
+        self.assertIsNotNone(self.sample_jobs[0].get("completed_at"))
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_transcript_confirmation_whitespace_only_rejected_before_gemini(self) -> None:
+        """Whitespace-only operator confirmation is strictly rejected before Gemini."""
+        local_provider = StaticTranscriptProvider(
+            default_content="1\n00:00:00,000 --> 00:00:05,000\nሙከራ\n",
+            requires_confirmation=True,
+        )
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=local_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id="   ")
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("empty or whitespace-only", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "submission")
+        self.assertIsNotNone(self.sample_jobs[0].get("completed_at"))
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_transcript_confirmation_padded_whitespace_matching_passes(self) -> None:
+        """Operator confirmation with leading/trailing whitespace is stripped cleanly and succeeds."""
+        local_provider = StaticTranscriptProvider(
+            default_content="1\n00:00:00,000 --> 00:00:05,000\nሙከራ\n",
+            requires_confirmation=True,
+        )
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=local_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id="  sample101  ")
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "completed")
+        self.assertIn("orchestrator_run: job-uuid-101", self.shared_state["timeline"])
+
+    def test_worker_transcript_confirmation_matching_passes(self) -> None:
+        """Matching operator confirmation, job video ID, and episode video ID passes successfully."""
+        local_provider = StaticTranscriptProvider(
+            default_content="1\n00:00:00,000 --> 00:00:05,000\nሙከራ\n",
+            requires_confirmation=True,
+        )
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=local_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id="sample101")
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "completed")
+        self.assertIn("orchestrator_run: job-uuid-101", self.shared_state["timeline"])
+
+    def test_worker_transcript_confirmation_mismatch_rejected_before_gemini(self) -> None:
+        """Mismatched confirmation ID is rejected before preflight and before Gemini."""
+        local_provider = StaticTranscriptProvider(
+            default_content="1\n00:00:00,000 --> 00:00:05,000\nሙከራ\n",
+            requires_confirmation=True,
+        )
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=local_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id="WRONG_ID_999")
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("Confirmed YouTube video ID", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "submission")
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
+
+    def test_worker_transcript_job_episode_id_mismatch_rejected_before_gemini(self) -> None:
+        """Job video ID mismatch with database episode video ID is rejected before Gemini."""
+        self.shared_state["episodes"]["ep-uuid-101"] = {
+            "publication_status": "draft",
+            "youtube_video_id": "EPISODE_DIFF_VID",
+        }
+        orchestrator = MockWorkerOrchestrator(timeline=self.shared_state["timeline"])
+        worker = JobWorker(
+            connection_factory=self._make_connection_factory(),
+            transcript_provider=self.transcript_provider,
+            orchestrator=orchestrator,
+        )
+
+        result = worker.process_next_job(confirm_youtube_video_id="sample101")
+
+        self.assertTrue(result.processed)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("does not match episode YouTube video ID", result.error or "")
+        self.assertEqual(self.sample_jobs[0]["status"], "failed")
+        self.assertEqual(self.sample_jobs[0]["current_stage"], "submission")
+        self.assertNotIn("orchestrator_run", "".join(self.shared_state["timeline"]))
 
 
 if __name__ == "__main__":

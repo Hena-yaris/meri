@@ -114,9 +114,11 @@ class StaticTranscriptProvider:
         self,
         default_content: Optional[Union[str, Dict[str, Any], List[Any]]] = None,
         video_id_to_content: Optional[Dict[str, Union[str, Dict[str, Any], List[Any]]]] = None,
+        requires_confirmation: bool = False,
     ) -> None:
         self.default_content = default_content
         self.video_id_to_content = video_id_to_content or {}
+        self.requires_confirmation = requires_confirmation
 
     def get_transcript(self, job: ProcessingJobRecord) -> Union[str, Dict[str, Any], List[Any]]:
         if job.youtube_video_id in self.video_id_to_content:
@@ -143,7 +145,12 @@ class JobWorker:
         self.orchestrator = orchestrator or PipelineOrchestrator()
         self.logger = custom_logger or logger
 
-    def process_next_job(self, allow_candidate_rerun: bool = False) -> JobWorkerResult:
+    def process_next_job(
+        self,
+        allow_candidate_rerun: bool = False,
+        confirm_youtube_video_id: Optional[str] = None,
+        require_confirmation: bool = False,
+    ) -> JobWorkerResult:
         """
         Claims and processes the next eligible pending job from the queue.
 
@@ -162,9 +169,20 @@ class JobWorker:
             )
 
         # Step 2: Execute processing lifecycle on claimed job
-        return self._execute_claimed_job(job, allow_candidate_rerun=allow_candidate_rerun)
+        return self._execute_claimed_job(
+            job,
+            allow_candidate_rerun=allow_candidate_rerun,
+            confirm_youtube_video_id=confirm_youtube_video_id,
+            require_confirmation=require_confirmation,
+        )
 
-    def process_job(self, job_id: str, allow_candidate_rerun: bool = False) -> JobWorkerResult:
+    def process_job(
+        self,
+        job_id: str,
+        allow_candidate_rerun: bool = False,
+        confirm_youtube_video_id: Optional[str] = None,
+        require_confirmation: bool = False,
+    ) -> JobWorkerResult:
         """
         Claims and processes a specific eligible job by ID if currently pending.
 
@@ -186,7 +204,12 @@ class JobWorker:
             )
 
         # Step 2: Execute processing lifecycle on claimed job
-        return self._execute_claimed_job(job, allow_candidate_rerun=allow_candidate_rerun)
+        return self._execute_claimed_job(
+            job,
+            allow_candidate_rerun=allow_candidate_rerun,
+            confirm_youtube_video_id=confirm_youtube_video_id,
+            require_confirmation=require_confirmation,
+        )
 
     def _claim_next_job(self) -> Optional[ProcessingJobRecord]:
         """
@@ -301,6 +324,8 @@ class JobWorker:
         self,
         job: ProcessingJobRecord,
         allow_candidate_rerun: bool,
+        confirm_youtube_video_id: Optional[str] = None,
+        require_confirmation: bool = False,
     ) -> JobWorkerResult:
         """
         Executes transcript acquisition and pipeline orchestration for a claimed job.
@@ -327,6 +352,116 @@ class JobWorker:
                 retry_count=job.retry_count,
                 error=error_msg,
             )
+
+        # 1.1 Explicit operator confirmation of YouTube video ID for local transcripts
+        if confirm_youtube_video_id is not None:
+            raw_stripped = confirm_youtube_video_id.strip() if isinstance(confirm_youtube_video_id, str) else ""
+            if not raw_stripped:
+                error_msg = (
+                    "Operator confirmation of YouTube video ID cannot be empty or whitespace-only."
+                )
+                self._record_job_failure(
+                    job_id=job.id,
+                    stage="submission",
+                    error_message=error_msg,
+                    retryable=False,
+                    current_retries=job.retry_count,
+                    max_retries=job.max_retries,
+                )
+                return JobWorkerResult(
+                    processed=True,
+                    job_id=job.id,
+                    status="failed",
+                    stage="submission",
+                    retry_count=job.retry_count,
+                    error=error_msg,
+                )
+            clean_confirmed_id = raw_stripped
+        else:
+            clean_confirmed_id = None
+
+        needs_confirmation = require_confirmation or getattr(self.transcript_provider, "requires_confirmation", False)
+        if needs_confirmation and not clean_confirmed_id:
+            error_msg = (
+                "Local transcript ingestion requires explicit operator confirmation of the expected "
+                "YouTube video ID (via confirm_youtube_video_id / --confirm-youtube-video-id)."
+            )
+            self._record_job_failure(
+                job_id=job.id,
+                stage="submission",
+                error_message=error_msg,
+                retryable=False,
+                current_retries=job.retry_count,
+                max_retries=job.max_retries,
+            )
+            return JobWorkerResult(
+                processed=True,
+                job_id=job.id,
+                status="failed",
+                stage="submission",
+                retry_count=job.retry_count,
+                error=error_msg,
+            )
+
+        if clean_confirmed_id is not None:
+            if clean_confirmed_id != job.youtube_video_id:
+                error_msg = (
+                    f"Confirmed YouTube video ID '{clean_confirmed_id}' does not match "
+                    f"job's registered YouTube video ID '{job.youtube_video_id}'."
+                )
+                self._record_job_failure(
+                    job_id=job.id,
+                    stage="submission",
+                    error_message=error_msg,
+                    retryable=False,
+                    current_retries=job.retry_count,
+                    max_retries=job.max_retries,
+                )
+                return JobWorkerResult(
+                    processed=True,
+                    job_id=job.id,
+                    status="failed",
+                    stage="submission",
+                    retry_count=job.retry_count,
+                    error=error_msg,
+                )
+        # 1.2 Read-only Pre-Gemini Editorial Preflight Check
+        preflight_conn = self.connection_factory()
+        preflight_cursor = (
+            preflight_conn.cursor()
+            if hasattr(preflight_conn, "cursor") and callable(preflight_conn.cursor)
+            else preflight_conn
+        )
+        try:
+            self.orchestrator.check_editorial_preflight(
+                cursor=preflight_cursor,
+                episode_id=job.episode_id,
+                allow_candidate_rerun=allow_candidate_rerun,
+                expected_youtube_video_id=job.youtube_video_id,
+            )
+        except Exception as exc:
+            safe_err = _redact_secrets(str(exc))
+            is_retryable = self._is_retryable_error(exc)
+            failure_stage = self._classify_failure_stage(exc)
+            new_status = self._record_job_failure(
+                job_id=job.id,
+                stage=failure_stage,
+                error_message=safe_err,
+                retryable=is_retryable,
+                current_retries=job.retry_count,
+                max_retries=job.max_retries,
+            )
+            return JobWorkerResult(
+                processed=True,
+                job_id=job.id,
+                status=new_status,
+                stage=failure_stage,
+                retry_count=job.retry_count,
+                error=safe_err,
+            )
+        finally:
+            self._close_db_resource(preflight_cursor, preflight_conn)
+            self._close_db_resource(preflight_conn)
 
         # 2. Acquire transcript content via injected provider
         if self.transcript_provider is None:
@@ -401,6 +536,7 @@ class JobWorker:
                 transcript_content=transcript_content,
                 connection_factory=self.connection_factory,
                 allow_candidate_rerun=allow_candidate_rerun,
+                expected_youtube_video_id=job.youtube_video_id,
             )
 
             self.logger.info("Job %s completed successfully: %s", job.id, pipeline_res.status)

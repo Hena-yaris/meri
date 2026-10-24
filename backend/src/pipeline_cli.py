@@ -110,14 +110,15 @@ def create_transcript_provider(
     if path.suffix.lower() == ".json":
         try:
             parsed = json.loads(content)
-            return StaticTranscriptProvider(default_content=parsed)
+            return StaticTranscriptProvider(default_content=parsed, requires_confirmation=True)
         except Exception:
             pass
 
-    return StaticTranscriptProvider(default_content=content)
+    return StaticTranscriptProvider(default_content=content, requires_confirmation=True)
 
 
-def main(argv: Optional[list] = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Builds and returns the ArgumentParser for the pipeline CLI."""
     parser = argparse.ArgumentParser(
         prog="python3 -m backend.src.pipeline_cli",
         description="Meri Content Pipeline Ingestion Worker CLI",
@@ -132,6 +133,10 @@ def main(argv: Optional[list] = None) -> int:
         help="Path to transcript file (JSON, SRT, WebVTT) if not fetching dynamically",
     )
     job_parser.add_argument(
+        "--confirm-youtube-video-id",
+        help="Explicit operator confirmation of the expected YouTube video ID matching the job and episode (required for local transcript ingestion)",
+    )
+    job_parser.add_argument(
         "--allow-rerun",
         action="store_true",
         help="Permit replacing unreviewed candidate staging data if rerun",
@@ -144,6 +149,10 @@ def main(argv: Optional[list] = None) -> int:
         help="Path to transcript file (JSON, SRT, WebVTT) if not fetching dynamically",
     )
     next_parser.add_argument(
+        "--confirm-youtube-video-id",
+        help="Explicit operator confirmation of the expected YouTube video ID matching the job and episode (required for local transcript ingestion)",
+    )
+    next_parser.add_argument(
         "--allow-rerun",
         action="store_true",
         help="Permit replacing unreviewed candidate staging data if rerun",
@@ -151,7 +160,11 @@ def main(argv: Optional[list] = None) -> int:
 
     # Subcommand: check-env
     subparsers.add_parser("check-env", help="Check database driver and environment configuration")
+    return parser
 
+
+def main(argv: Optional[list] = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "check-env":
@@ -162,6 +175,15 @@ def main(argv: Optional[list] = None) -> int:
         has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
         print(f"GEMINI_API_KEY: {'CONFIGURED' if has_gemini else 'NOT SET'}")
         return 0 if driver else 1
+
+    raw_confirm = getattr(args, "confirm_youtube_video_id", None)
+    confirm_video_id = raw_confirm.strip() if (raw_confirm and isinstance(raw_confirm, str)) else None
+    if getattr(args, "transcript_file", None) and not confirm_video_id:
+        logger.error(
+            "Local transcript ingestion via --transcript-file requires explicit operator confirmation "
+            "of the expected YouTube video ID using --confirm-youtube-video-id <video_id>."
+        )
+        return 1
 
     try:
         connection_factory = create_connection_factory()
@@ -184,10 +206,17 @@ def main(argv: Optional[list] = None) -> int:
 
     if args.command == "run-job":
         logger.info("Executing job %s (allow_rerun=%s)", args.job_id, allow_rerun)
-        result = worker.process_job(args.job_id, allow_candidate_rerun=allow_rerun)
+        result = worker.process_job(
+            args.job_id,
+            allow_candidate_rerun=allow_rerun,
+            confirm_youtube_video_id=confirm_video_id,
+        )
     elif args.command == "run-next":
         logger.info("Executing next pending job (allow_rerun=%s)", allow_rerun)
-        result = worker.process_next_job(allow_candidate_rerun=allow_rerun)
+        result = worker.process_next_job(
+            allow_candidate_rerun=allow_rerun,
+            confirm_youtube_video_id=confirm_video_id,
+        )
     else:
         logger.error("Unknown command: %s", args.command)
         return 1

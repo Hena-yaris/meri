@@ -183,6 +183,7 @@ class PipelineOrchestrator:
         format_hint: Optional[str] = None,
         run_number: Optional[int] = None,
         allow_candidate_rerun: bool = False,
+        expected_youtube_video_id: Optional[str] = None,
     ) -> PipelineExecutionResult:
         """
         Runs the content pipeline end-to-end for one episode and transcript input.
@@ -200,12 +201,13 @@ class PipelineOrchestrator:
                         If omitted (None), the next available run_number is computed automatically.
             allow_candidate_rerun: If True, permits replacing prior unreviewed candidate staging data.
                                    Verified/reviewed content and published episodes are NEVER overwritten.
+            expected_youtube_video_id: Optional YouTube video ID to verify against the episode record.
 
         Returns:
             PipelineExecutionResult describing persisted entities and diagnostics.
 
         Raises:
-            PipelineInputError: If identifiers, connection contract, or transcript content are missing/invalid.
+            PipelineInputError: If identifiers, connection contract, transcript content, or video ID are missing/invalid.
             PipelineExtractionError: If transcript parsing, chunking, or Gemini LLM extraction fails.
             PipelineValidationError: If candidate extraction payload fails syntactic/semantic validation.
             EditorialProtectionError: If rerun is blocked because episode is published or contains reviewed content.
@@ -342,7 +344,12 @@ class PipelineOrchestrator:
             cursor = effective_connection.cursor() if hasattr(effective_connection, "cursor") and callable(effective_connection.cursor) else effective_connection
 
             # Step A: Enforce rerun policy and editorial protection
-            self._enforce_rerun_policy(cursor, episode_id, allow_candidate_rerun=allow_candidate_rerun)
+            self._enforce_rerun_policy(
+                cursor,
+                episode_id,
+                allow_candidate_rerun=allow_candidate_rerun,
+                expected_youtube_video_id=expected_youtube_video_id,
+            )
 
             # Step B: Persist transcript segments
             segment_index_to_id = persist_transcript_segments(cursor, episode_id, segments)
@@ -415,7 +422,7 @@ class PipelineOrchestrator:
             if hasattr(effective_connection, "commit") and callable(effective_connection.commit):
                 effective_connection.commit()
 
-        except EditorialProtectionError:
+        except (EditorialProtectionError, PipelineInputError):
             if hasattr(effective_connection, "rollback") and callable(effective_connection.rollback):
                 effective_connection.rollback()
             raise
@@ -497,38 +504,95 @@ class PipelineOrchestrator:
         if isinstance(transcript_content, (dict, list)) and len(transcript_content) == 0:
             raise PipelineInputError("transcript_content collection cannot be empty.")
 
-    def _enforce_rerun_policy(self, cursor: Any, episode_id: str, allow_candidate_rerun: bool) -> None:
+    @staticmethod
+    def check_editorial_preflight(
+        cursor: Any,
+        episode_id: str,
+        allow_candidate_rerun: bool = False,
+        expected_youtube_video_id: Optional[str] = None,
+        for_update: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Enforces editorial protection and safe rerun policies:
-        1. Published episodes are strictly protected and can never be modified.
-        2. Episodes with any reviewed editorial items (verified or rejected) can never be modified.
-        3. If unreviewed candidates exist:
-           - If allow_candidate_rerun is False: rejects with EditorialProtectionError.
-           - If allow_candidate_rerun is True: safely deletes prior unreviewed candidates,
-             chunks, segments, and unreferenced extraction runs in FK-safe order before inserting new data.
+        Executes editorial preflight check before extraction or persistence:
+        1. Confirms the target episode exists in the database.
+        2. Confirms the episode is not published (publication_status != 'published').
+        3. If expected_youtube_video_id is provided, verifies that episodes.youtube_video_id matches it.
+        4. Confirms no reviewed editorial items (verified or rejected) exist for the episode.
+        5. If prior unreviewed candidates or segments exist:
+           - If allow_candidate_rerun is False: raises EditorialProtectionError.
+           - If allow_candidate_rerun is True: permits rerun (returns has_unreviewed_data=True).
+
+        Concurrency Contract:
+            - When for_update=False: Strictly read-only preflight check without row locks. Used
+              before Gemini extraction to avoid holding idle transaction locks.
+            - When for_update=True: Acquires PostgreSQL row locks (FOR UPDATE) hierarchically:
+              First on the parent episode row, then on existing child insights and quotations.
+              Serializes candidate replacement against concurrent publication and editorial review.
+
+        Raises:
+            PipelineInputError: If episode does not exist or YouTube video ID mismatches.
+            EditorialProtectionError: If episode is published, contains reviewed items, or has
+                                     unpermitted prior candidate data.
         """
-        # 1. Check publication status
-        cursor.execute("SELECT publication_status FROM episodes WHERE id = %s;", (episode_id,))
+        # 1. Check episode existence, publication status, and YouTube video ID
+        # Hierarchical lock level 1: parent episode row
+        ep_query = (
+            "SELECT publication_status, youtube_video_id FROM episodes WHERE id = %s FOR UPDATE;"
+            if for_update
+            else "SELECT publication_status, youtube_video_id FROM episodes WHERE id = %s;"
+        )
+        cursor.execute(ep_query, (episode_id,))
         row = cursor.fetchone()
-        if row and row[0] == "published":
+        if not row:
+            raise PipelineInputError(f"Episode {episode_id} does not exist in the database.")
+
+        pub_status = str(row[0]) if row[0] is not None else ""
+        ep_video_id = str(row[1]) if row[1] is not None else ""
+
+        if pub_status == "published":
             raise EditorialProtectionError(
                 f"Episode {episode_id} is already published; pipeline execution cannot modify published episodes."
             )
 
-        # 2. Check for reviewed items (both verified and rejected)
-        cursor.execute(
-            "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status != 'candidate';",
-            (episode_id,),
-        )
-        reviewed_ins_row = cursor.fetchone()
-        reviewed_ins_count = int(reviewed_ins_row[0]) if reviewed_ins_row and reviewed_ins_row[0] is not None else 0
+        if expected_youtube_video_id is not None:
+            clean_expected = expected_youtube_video_id.strip()
+            if clean_expected and ep_video_id != clean_expected:
+                raise PipelineInputError(
+                    f"Job YouTube video ID '{clean_expected}' does not match episode YouTube video ID '{ep_video_id}'."
+                )
 
-        cursor.execute(
-            "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status != 'candidate';",
-            (episode_id,),
-        )
-        reviewed_q_row = cursor.fetchone()
-        reviewed_q_count = int(reviewed_q_row[0]) if reviewed_q_row and reviewed_q_row[0] is not None else 0
+        # 2. Check for reviewed items (both verified and rejected)
+        # Hierarchical lock level 2: child candidate and reviewed items
+        if for_update:
+            cursor.execute(
+                "SELECT id, review_status FROM insights WHERE episode_id = %s FOR UPDATE;",
+                (episode_id,),
+            )
+            insight_rows = cursor.fetchall() or []
+            reviewed_ins_count = sum(1 for r in insight_rows if r[1] != "candidate")
+            existing_cand_ins = sum(1 for r in insight_rows if r[1] == "candidate")
+
+            cursor.execute(
+                "SELECT id, review_status FROM quotations WHERE episode_id = %s FOR UPDATE;",
+                (episode_id,),
+            )
+            quote_rows = cursor.fetchall() or []
+            reviewed_q_count = sum(1 for r in quote_rows if r[1] != "candidate")
+            existing_cand_q = sum(1 for r in quote_rows if r[1] == "candidate")
+        else:
+            cursor.execute(
+                "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status != 'candidate';",
+                (episode_id,),
+            )
+            reviewed_ins_row = cursor.fetchone()
+            reviewed_ins_count = int(reviewed_ins_row[0]) if reviewed_ins_row and reviewed_ins_row[0] is not None else 0
+
+            cursor.execute(
+                "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status != 'candidate';",
+                (episode_id,),
+            )
+            reviewed_q_row = cursor.fetchone()
+            reviewed_q_count = int(reviewed_q_row[0]) if reviewed_q_row and reviewed_q_row[0] is not None else 0
 
         if reviewed_ins_count > 0 or reviewed_q_count > 0:
             raise EditorialProtectionError(
@@ -552,28 +616,69 @@ class PipelineOrchestrator:
         chk_row = cursor.fetchone()
         existing_chk_count = int(chk_row[0]) if chk_row and chk_row[0] is not None else 0
 
-        cursor.execute(
-            "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status = 'candidate';",
-            (episode_id,),
-        )
-        cand_ins_row = cursor.fetchone()
-        existing_cand_ins = int(cand_ins_row[0]) if cand_ins_row and cand_ins_row[0] is not None else 0
+        if not for_update:
+            cursor.execute(
+                "SELECT count(*) FROM insights WHERE episode_id = %s AND review_status = 'candidate';",
+                (episode_id,),
+            )
+            cand_ins_row = cursor.fetchone()
+            existing_cand_ins = int(cand_ins_row[0]) if cand_ins_row and cand_ins_row[0] is not None else 0
 
-        cursor.execute(
-            "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status = 'candidate';",
-            (episode_id,),
-        )
-        cand_q_row = cursor.fetchone()
-        existing_cand_q = int(cand_q_row[0]) if cand_q_row and cand_q_row[0] is not None else 0
+            cursor.execute(
+                "SELECT count(*) FROM quotations WHERE episode_id = %s AND review_status = 'candidate';",
+                (episode_id,),
+            )
+            cand_q_row = cursor.fetchone()
+            existing_cand_q = int(cand_q_row[0]) if cand_q_row and cand_q_row[0] is not None else 0
 
-        if existing_seg_count > 0 or existing_chk_count > 0 or existing_cand_ins > 0 or existing_cand_q > 0:
-            if not allow_candidate_rerun:
-                raise EditorialProtectionError(
-                    f"Episode {episode_id} already contains persisted pipeline data "
-                    f"({existing_seg_count} segments, {existing_chk_count} chunks, "
-                    f"{existing_cand_ins} candidate insights, {existing_cand_q} candidate quotations). "
-                    f"Reruns must explicitly enable allow_candidate_rerun to replace unreviewed staging data."
-                )
+        has_unreviewed_data = (
+            existing_seg_count > 0
+            or existing_chk_count > 0
+            or existing_cand_ins > 0
+            or existing_cand_q > 0
+        )
+
+        if has_unreviewed_data and not allow_candidate_rerun:
+            raise EditorialProtectionError(
+                f"Episode {episode_id} already contains persisted pipeline data "
+                f"({existing_seg_count} segments, {existing_chk_count} chunks, "
+                f"{existing_cand_ins} candidate insights, {existing_cand_q} candidate quotations). "
+                f"Reruns must explicitly enable allow_candidate_rerun to replace unreviewed staging data."
+            )
+
+        return {
+            "episode_id": episode_id,
+            "publication_status": pub_status,
+            "youtube_video_id": ep_video_id,
+            "has_unreviewed_data": has_unreviewed_data,
+            "segments_count": existing_seg_count,
+            "chunks_count": existing_chk_count,
+            "candidate_insights_count": existing_cand_ins,
+            "candidate_quotations_count": existing_cand_q,
+        }
+
+    def _enforce_rerun_policy(
+        self,
+        cursor: Any,
+        episode_id: str,
+        allow_candidate_rerun: bool,
+        expected_youtube_video_id: Optional[str] = None,
+    ) -> None:
+        """
+        Enforces editorial protection and safe rerun policies inside the persistence transaction:
+        Re-verifies all editorial preflight invariants under strict FOR UPDATE locks and,
+        if allow_candidate_rerun is True and unreviewed staging data exists, executes
+        foreign-key-safe deletions.
+        """
+        preflight_info = self.check_editorial_preflight(
+            cursor=cursor,
+            episode_id=episode_id,
+            allow_candidate_rerun=allow_candidate_rerun,
+            expected_youtube_video_id=expected_youtube_video_id,
+            for_update=True,
+        )
+
+        if allow_candidate_rerun and preflight_info.get("has_unreviewed_data"):
             # Foreign-key-safe deletion order for unreviewed staging data:
             # 1. Candidate insights (cascades to insight_evidence)
             cursor.execute(
