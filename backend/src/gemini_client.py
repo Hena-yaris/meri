@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import email.utils
 import json
 import os
+from pathlib import Path
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -16,6 +17,19 @@ import urllib.parse
 import urllib.request
 
 from .models import TranscriptChunk
+
+# Canonical schema path for structured candidate extraction
+DEFAULT_EXTRACTION_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "gemini_extraction_schema.v1.json"
+
+
+def _load_canonical_schema_str() -> str:
+    """Safely loads the canonical Gemini extraction JSON schema if present."""
+    if DEFAULT_EXTRACTION_SCHEMA_PATH.is_file():
+        try:
+            return DEFAULT_EXTRACTION_SCHEMA_PATH.read_text(encoding="utf-8")
+        except Exception:
+            return ""
+    return ""
 
 # Standard Gemini REST endpoint base
 GEMINI_API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -93,9 +107,42 @@ def validate_model_id_syntax(model_id: str) -> None:
 verify_model_configuration = validate_model_id_syntax
 
 
-def _redact_secrets(text: str) -> str:
-    """Strips API keys and sensitive tokens from error messages and logs."""
-    return re.sub(r"([?&]key=)[^&\s'\"]+", r"\1[REDACTED]", text)
+def _redact_secrets(text: Optional[str]) -> str:
+    """Strips API keys, bearer tokens, passwords, and sensitive parameters."""
+    if not text:
+        return "" if text is None else text
+    scrubbed = str(text)
+    scrubbed = re.sub(
+        r"([?&](?:key|password|pwd|secret|token)=)[^&\s'\"]+",
+        r"\1[REDACTED]",
+        scrubbed,
+        flags=re.IGNORECASE,
+    )
+    scrubbed = re.sub(r"AIza[0-9A-Za-z-_]{30,40}", "[REDACTED_API_KEY]", scrubbed)
+    scrubbed = re.sub(
+        r"(Bearer\s+)[A-Za-z0-9\-_.]{10,}",
+        r"\1[REDACTED_TOKEN]",
+        scrubbed,
+        flags=re.IGNORECASE,
+    )
+    return scrubbed
+
+
+def _extract_error_message(body_text: str) -> str:
+    """Safely extracts error message from Gemini JSON response body, stripping secrets."""
+    if not body_text:
+        return "No response body provided by server."
+    try:
+        data = json.loads(body_text)
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict) and "message" in err:
+                return _redact_secrets(str(err["message"]))
+            elif "message" in data:
+                return _redact_secrets(str(data["message"]))
+    except Exception:
+        pass
+    return _redact_secrets(body_text[:200])
 
 
 def check_model_availability(
@@ -280,7 +327,7 @@ class GeminiConfig:
     model_id: str = "gemini-2.0-flash"
     api_key: Optional[str] = None
     temperature: float = 0.1
-    timeout_seconds: float = 30.0
+    timeout_seconds: Optional[float] = None
     max_retries: int = 3
     initial_backoff_seconds: float = 1.0
     max_backoff_seconds: float = 30.0
@@ -293,6 +340,21 @@ class GeminiConfig:
         env_model = os.environ.get("GEMINI_MODEL_ID")
         if env_model:
             self.model_id = env_model
+        # Precedence for timeout_seconds:
+        # 1. Explicit constructor value (e.g. from --request-timeout)
+        # 2. Environment variable GEMINI_TIMEOUT_SECONDS
+        # 3. Default fallback: 60.0s
+        if self.timeout_seconds is None:
+            env_timeout = os.environ.get("GEMINI_TIMEOUT_SECONDS")
+            if env_timeout:
+                try:
+                    parsed_timeout = float(env_timeout)
+                    if parsed_timeout > 0:
+                        self.timeout_seconds = parsed_timeout
+                except ValueError:
+                    pass
+            if self.timeout_seconds is None:
+                self.timeout_seconds = 60.0
         verify_model_configuration(self.model_id)
 
 
@@ -345,17 +407,38 @@ class GeminiClient:
             for c in chunks
         )
 
+        effective_schema_str = schema_json_str if schema_json_str is not None else _load_canonical_schema_str()
+
+        schema_directive = ""
+        if effective_schema_str:
+            schema_directive = (
+                f"\n\nJSON SCHEMA SPECIFICATION:\n"
+                f"Your JSON output MUST conform strictly to the following JSON schema:\n"
+                f"```json\n{effective_schema_str}\n```\n"
+            )
+
         system_instruction = (
             "You are an expert business knowledge extraction engine for Meri, an editorial platform capturing "
             "masterclass business intelligence from Ethiopian entrepreneurs.\n"
             "Analyze the provided timestamped transcript segments and extract structured candidate business intelligence.\n"
             "STRICT FACTUAL CONSTRAINTS:\n"
             "1. Ground Truth: Only extract facts, metrics, and insights explicitly stated in the transcript.\n"
-            "2. Direct Amharic Quotations: Spoken quotes MUST be in their original spoken Amharic script. "
-            "Never paraphrase a quote as direct speech.\n"
-            "3. Evidence Grounding: Every insight must cite valid evidence_segment_indices. "
-            "Every quote must cite valid source_segment_indices matching where the words were spoken.\n"
+            "2. Direct Amharic Quotations: Spoken quotes MUST be verbatim in their original spoken Amharic script, "
+            "without paraphrasing or editorial additions. Never paraphrase a quote as direct speech.\n"
+            "3. Evidence Grounding: Every insight must cite valid evidence_segment_indices matching the explicit "
+            "[Seg <index> | ...] tags in the transcript. "
+            "Every quote must cite valid source_segment_indices requesting all contiguous segment indices "
+            "needed to cover the entire quotation, in chronological order.\n"
             "4. Format: Output MUST be valid JSON conforming strictly to the requested schema.\n"
+            "5. Required Structure: Output must be a single JSON object containing all required top-level keys:\n"
+            "   - 'schema_version': exactly '1.0.0'\n"
+            "   - 'episode_summary': object with 'brief' (30-320 chars), 'comprehensive' (>=120 chars), 'primary_themes' (2-8 strings)\n"
+            "   - 'guest_profile': object with 'name', 'title', 'company', 'bio' (>=50 chars), 'industry'\n"
+            "   - 'journey_milestones': array of objects with 'phase_or_year', 'milestone_description', 'strategic_decision', 'evidence_segment_indices'\n"
+            "   - 'insights': array of objects with 'title' (5-140 chars), 'category', 'summary' (>=30 chars), 'takeaways' (1-6 strings), 'practical_action' (>=15 chars), 'evidence_segment_indices' (array of integers), 'confidence_score' (0.0 to 1.0)\n"
+            "     'category' MUST be one of: 'Operations', 'Fintech', 'Technology & Infrastructure', 'Leadership & Culture', 'Sales & Marketing', 'Finance & Capital', 'Legal & Regulatory', 'Product Strategy', 'Export & Trade'\n"
+            "   - 'quotations': array of objects with 'amharic_quote' (>=10 chars verbatim spoken Amharic, without paraphrasing or editorial additions), 'english_translation' (>=10 chars), 'speaker', 'source_segment_indices' (array of contiguous integers in chronological order, minItems: 1), 'timestamp_seconds' (integer derived strictly from first segment start_ms / 1000), 'context' (>=15 chars), 'importance_rationale'\n"
+            "   - 'suggested_tags': array of 2-10 strings\n"
         )
 
         contents = [
@@ -363,8 +446,12 @@ class GeminiClient:
                 "role": "user",
                 "parts": [
                     {
-                        "text": f"{system_instruction}\n\nTRANSCRIPT CONTEXT:\n{transcript_content}\n\n"
-                                f"Extract the candidate JSON payload now."
+                        "text": (
+                            f"{system_instruction}"
+                            f"{schema_directive}\n"
+                            f"TRANSCRIPT CONTEXT:\n{transcript_content}\n\n"
+                            f"Extract the candidate JSON payload now strictly conforming to schema_version 1.0.0."
+                        )
                     }
                 ],
             }
@@ -425,11 +512,13 @@ class GeminiClient:
 
                 # Classify HTTP error
                 if status_code in (401, 403):
-                    raise GeminiAuthError(f"Gemini authentication failed (HTTP {status_code}). Check GEMINI_API_KEY.")
+                    safe_reason = _extract_error_message(body_text)
+                    raise GeminiAuthError(f"Gemini authentication failed (HTTP {status_code}): {safe_reason}")
 
                 if status_code == 400:
+                    safe_reason = _extract_error_message(body_text)
                     raise GeminiBadRequestError(
-                        f"Gemini rejected request payload (HTTP 400). Response: {body_text[:200]}"
+                        f"Gemini rejected request payload (HTTP 400): {safe_reason}"
                     )
 
                 if status_code == 429:
@@ -438,9 +527,10 @@ class GeminiClient:
                         "quota" in body_text.lower()
                         or "resource_exhausted" in body_text.lower()
                     )
+                    safe_reason = _extract_error_message(body_text)
                     if is_hard_quota and "rate" not in body_text.lower():
                         raise GeminiQuotaExhaustedError(
-                            "Gemini API quota exhausted (HTTP 429). Permanent limit reached."
+                            f"Gemini API quota exhausted (HTTP 429): {safe_reason}"
                         )
 
                     # Transient rate limit: check Retry-After header
@@ -451,7 +541,7 @@ class GeminiClient:
 
                     if attempt >= self.config.max_retries:
                         raise GeminiRateLimitError(
-                            f"Gemini rate limit exceeded (HTTP 429). Max retries ({self.config.max_retries}) exhausted."
+                            f"Gemini rate limit exceeded (HTTP 429) after {attempt} attempts: {safe_reason}"
                         )
 
                     self.sleep_fn(delay)
@@ -462,11 +552,17 @@ class GeminiClient:
                     continue
 
                 if status_code in (500, 502, 503, 504):
+                    # Service unavailable / overloaded: check Retry-After header
+                    retry_after_hdr = headers.get("retry-after")
+                    delay = parse_retry_after(
+                        retry_after_hdr, current_delay, self.config.max_backoff_seconds
+                    )
+                    safe_reason = _extract_error_message(body_text)
                     if attempt >= self.config.max_retries:
                         raise GeminiServiceUnavailableError(
-                            f"Gemini service unavailable (HTTP {status_code}). Max retries exhausted."
+                            f"Gemini service unavailable (HTTP {status_code}) after {attempt} attempts: {safe_reason}"
                         )
-                    self.sleep_fn(current_delay)
+                    self.sleep_fn(delay)
                     current_delay = min(
                         current_delay * self.config.backoff_multiplier,
                         self.config.max_backoff_seconds,
@@ -474,12 +570,13 @@ class GeminiClient:
                     continue
 
                 # Unexpected status code
-                raise GeminiClientError(f"Unexpected Gemini HTTP response {status_code}: {body_text[:200]}")
+                safe_reason = _extract_error_message(body_text)
+                raise GeminiClientError(f"Unexpected Gemini HTTP response {status_code}: {safe_reason}")
 
             except (GeminiTimeoutError, TimeoutError) as exc:
                 if attempt >= self.config.max_retries:
                     raise GeminiRetryExhaustedError(
-                        f"Request timed out after {attempt} attempts: {exc}"
+                        f"Request timed out after {attempt} attempts (timeout={self.config.timeout_seconds}s): {exc}"
                     ) from exc
                 self.sleep_fn(current_delay)
                 current_delay = min(

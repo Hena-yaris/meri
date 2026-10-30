@@ -71,7 +71,77 @@ abstract class AppTypography {
     );
   }
 
-  /// Distinctive editorial quotation style for Amharic insights and translated quotations.
+  /// Compact editorial title for nested cards or minor sections.
+  static TextStyle titleSmall({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.playfairDisplay(
+      textStyle: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.05,
+        height: 1.4,
+        color: color,
+        fontFamilyFallback: const ['Georgia', 'serif'],
+      ),
+    );
+  }
+
+  /// Compact editorial display for sub-hero highlights.
+  static TextStyle displaySmall({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.playfairDisplay(
+      textStyle: TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        height: 1.35,
+        color: color,
+        fontFamilyFallback: const ['Georgia', 'serif'],
+      ),
+    );
+  }
+
+  /// Prominent editorial section headline.
+  static TextStyle headlineLarge({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.playfairDisplay(
+      textStyle: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.3,
+        height: 1.3,
+        color: color,
+        fontFamilyFallback: const ['Georgia', 'serif'],
+      ),
+    );
+  }
+
+  /// Medium editorial section headline.
+  static TextStyle headlineMedium({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.playfairDisplay(
+      textStyle: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
+        height: 1.35,
+        color: color,
+        fontFamilyFallback: const ['Georgia', 'serif'],
+      ),
+    );
+  }
+
+  /// Compact editorial section headline.
+  static TextStyle headlineSmall({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.playfairDisplay(
+      textStyle: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.1,
+        height: 1.4,
+        color: color,
+        fontFamilyFallback: const ['Georgia', 'serif'],
+      ),
+    );
+  }
+
+  /// Distinctive editorial quotation style for English quotations.
   static TextStyle quotation({
     Color color = AppColors.inkBlack,
     bool isItalic = true,
@@ -86,6 +156,32 @@ abstract class AppTypography {
         color: color,
         fontFamilyFallback: const ['Georgia', 'serif'],
       ),
+    );
+  }
+
+  /// Authentic upright typography for Amharic quotations and Ethiopic script.
+  ///
+  /// Prevents culturally and typographically invalid faux-italics (oblique distortion)
+  /// on Ge'ez fidel characters while maintaining proper line height and a resilient
+  /// system fallback chain ('Noto Serif Ethiopic', 'Noto Sans Ethiopic', 'Nyala').
+  static TextStyle amharicQuotation({
+    Color color = AppColors.inkBlack,
+    double fontSize = 16,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: FontWeight.w500,
+      fontStyle: FontStyle.normal, // Ethiopic scripts must strictly remain upright
+      height: 1.65,
+      letterSpacing: 0.0, // Preserve standard Ge'ez kerning and fidel vowel marks
+      color: color,
+      fontFamilyFallback: const [
+        'Noto Serif Ethiopic',
+        'Noto Sans Ethiopic',
+        'Nyala',
+        'Abyssinica SIL',
+        'serif',
+      ],
     );
   }
 
@@ -176,6 +272,19 @@ abstract class AppTypography {
     );
   }
 
+  /// Medium functional label for secondary buttons, filters, and chips.
+  static TextStyle labelMedium({Color color = AppColors.inkBlack}) {
+    return GoogleFonts.inter(
+      textStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.3,
+        color: color,
+        fontFamilyFallback: const ['Roboto', 'sans-serif'],
+      ),
+    );
+  }
+
   /// Fine metadata, tags, and badge chips.
   static TextStyle labelSmall({Color color = AppColors.stoneGray}) {
     return GoogleFonts.inter(
@@ -194,12 +303,18 @@ abstract class AppTypography {
     return TextTheme(
       displayLarge: displayLarge(color: primaryTextColor),
       displayMedium: displayMedium(color: primaryTextColor),
+      displaySmall: displaySmall(color: primaryTextColor),
+      headlineLarge: headlineLarge(color: primaryTextColor),
+      headlineMedium: headlineMedium(color: primaryTextColor),
+      headlineSmall: headlineSmall(color: primaryTextColor),
       titleLarge: titleLarge(color: primaryTextColor),
       titleMedium: titleMedium(color: primaryTextColor),
+      titleSmall: titleSmall(color: primaryTextColor),
       bodyLarge: bodyLarge(color: primaryTextColor),
       bodyMedium: bodyMedium(color: secondaryTextColor),
       bodySmall: bodySmall(color: secondaryTextColor),
       labelLarge: labelLarge(color: primaryTextColor),
+      labelMedium: labelMedium(color: primaryTextColor),
       labelSmall: labelSmall(color: secondaryTextColor),
     );
   }

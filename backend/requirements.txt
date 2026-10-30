@@ -1,0 +1,5 @@
+# Meri Content Pipeline: Backend Runtime Dependencies
+# Target: Python 3.12+ (Linux x86_64)
+
+# PostgreSQL Driver (PEP 249 compliant)
+psycopg2-binary>=2.9.9,<3.0.0

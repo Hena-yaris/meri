@@ -215,7 +215,7 @@
           "amharic_quote",
           "english_translation",
           "speaker",
-          "source_segment_index",
+          "source_segment_indices",
           "timestamp_seconds",
           "context"
         ],
@@ -224,7 +224,7 @@
           "amharic_quote": {
             "type": "string",
             "minLength": 10,
-            "description": "Exact or near-verbatim Amharic quote spoken by the guest."
+            "description": "Verbatim Amharic source text spoken by the guest, without paraphrasing or editorial additions."
           },
           "english_translation": {
             "type": "string",
@@ -236,15 +236,19 @@
             "minLength": 2,
             "description": "Name of the speaker who uttered the quote."
           },
-          "source_segment_index": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "Index of the specific transcript segment where this quote begins."
+          "source_segment_indices": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "All contiguous zero-based transcript segment indices needed to cover the entire verbatim quotation, in chronological order."
           },
           "timestamp_seconds": {
             "type": "integer",
             "minimum": 0,
-            "description": "Absolute elapsed start time in seconds, derived strictly from source_segment_index start_ms / 1000. Never invented."
+            "description": "Absolute elapsed start time in seconds, derived strictly from the first referenced segment's start_ms / 1000 in source_segment_indices. Never invented."
           },
           "context": {
             "type": "string",

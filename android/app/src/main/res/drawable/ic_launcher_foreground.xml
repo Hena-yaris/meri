@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bar 1 (Outer Left): Archive Sand, height 20dp -->
+    <path
+        android:fillColor="@color/archive_sand"
+        android:pathData="M 31,47 A 3,3 0 0,1 37,47 L 37,61 A 3,3 0 0,1 31,61 Z" />
+    <!-- Bar 2 (Inner Left): Warm Ivory, height 40dp -->
+    <path
+        android:fillColor="@color/warm_ivory"
+        android:pathData="M 41,37 A 3,3 0 0,1 47,37 L 47,71 A 3,3 0 0,1 41,71 Z" />
+    <!-- Bar 3 (Center Hero): Meri Orange, height 56dp -->
+    <path
+        android:fillColor="@color/meri_orange"
+        android:pathData="M 51,29 A 3,3 0 0,1 57,29 L 57,79 A 3,3 0 0,1 51,79 Z" />
+    <!-- Bar 4 (Inner Right): Warm Ivory, height 40dp -->
+    <path
+        android:fillColor="@color/warm_ivory"
+        android:pathData="M 61,37 A 3,3 0 0,1 67,37 L 67,71 A 3,3 0 0,1 61,71 Z" />
+    <!-- Bar 5 (Outer Right): Archive Sand, height 20dp -->
+    <path
+        android:fillColor="@color/archive_sand"
+        android:pathData="M 71,47 A 3,3 0 0,1 77,47 L 77,61 A 3,3 0 0,1 71,61 Z" />
+</vector>

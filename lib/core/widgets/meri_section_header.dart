@@ -12,6 +12,7 @@ class MeriSectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.eyebrow,
+    this.eyebrowColor,
     this.actionLabel,
     this.onActionPressed,
     this.showAccentBar = true,
@@ -23,6 +24,7 @@ class MeriSectionHeader extends StatelessWidget {
 
   final String title;
   final String? eyebrow;
+  final Color? eyebrowColor;
   final String? actionLabel;
   final VoidCallback? onActionPressed;
   final bool showAccentBar;
@@ -33,6 +35,7 @@ class MeriSectionHeader extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryTextColor = isDark ? AppColors.darkTextPrimary : AppColors.inkBlack;
     final accentColor = isDark ? AppColors.meriOrangeLight : AppColors.meriOrange;
+    final resolvedEyebrowColor = eyebrowColor ?? accentColor;
 
     return Padding(
       padding: padding,
@@ -47,11 +50,12 @@ class MeriSectionHeader extends StatelessWidget {
                 if (eyebrow != null) ...[
                   Text(
                     eyebrow!.toUpperCase(),
-                    style: AppTypography.eyebrow(color: accentColor),
+                    style: AppTypography.eyebrow(color: resolvedEyebrowColor),
                   ),
                   const SizedBox(height: AppSpacing.xxs),
                 ],
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     if (showAccentBar) ...[
                       Container(
@@ -76,18 +80,24 @@ class MeriSectionHeader extends StatelessWidget {
             ),
           ),
           if (actionLabel != null)
-            TextButton(
-              onPressed: onActionPressed,
-              style: TextButton.styleFrom(
-                foregroundColor: accentColor,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                actionLabel!,
-                style: AppTypography.labelSmall(color: accentColor).copyWith(
-                  fontWeight: FontWeight.w700,
+            Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.sm),
+              child: TextButton(
+                onPressed: onActionPressed,
+                style: TextButton.styleFrom(
+                  foregroundColor: accentColor,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                    vertical: AppSpacing.xs,
+                  ),
+                  minimumSize: const Size(48, 36),
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                ),
+                child: Text(
+                  actionLabel!,
+                  style: AppTypography.labelSmall(color: accentColor).copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

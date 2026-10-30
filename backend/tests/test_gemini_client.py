@@ -236,6 +236,77 @@ class TestGeminiClient(unittest.TestCase):
         self.assertEqual(len(self.sleep_calls), 2)
         self.assertEqual(self.sleep_calls, [1.0, 2.0])
 
+    def test_service_unavailable_respects_retry_after_and_captures_body(self) -> None:
+        """Verifies HTTP 503 respects Retry-After header and captures sanitized error message."""
+        attempts = 0
+        error_json = json.dumps({
+            "error": {
+                "code": 503,
+                "message": "The model is overloaded. Please try again later.",
+                "status": "UNAVAILABLE",
+            }
+        })
+
+        def mock_transport(req: urllib.request.Request, timeout: float):
+            nonlocal attempts
+            attempts += 1
+            return 503, {"retry-after": "5"}, error_json
+
+        client = GeminiClient(
+            config=GeminiConfig(
+                api_key="test-key",
+                max_retries=3,
+                initial_backoff_seconds=1.0,
+            ),
+            transport=mock_transport,
+            sleep_fn=self.mock_sleep,
+        )
+
+        with self.assertRaises(GeminiServiceUnavailableError) as ctx:
+            client.generate_candidate_json([self.sample_chunk])
+
+        self.assertEqual(attempts, 3)
+        # Should sleep for 5.0 seconds each retry due to Retry-After: 5 header
+        self.assertEqual(self.sleep_calls, [5.0, 5.0])
+        err_msg = str(ctx.exception)
+        self.assertIn("The model is overloaded. Please try again later.", err_msg)
+        self.assertIn("HTTP 503", err_msg)
+        self.assertIn("3 attempts", err_msg)
+
+    def test_service_unavailable_sanitizes_body_secrets(self) -> None:
+        """Verifies error responses containing secrets are strictly redacted in exception message."""
+        sensitive_body = '{"error": {"message": "Capacity exceeded for key AIzaSyTestSecretKey1234567890123456789"}}'
+
+        def mock_transport(req: urllib.request.Request, timeout: float):
+            return 503, {}, sensitive_body
+
+        client = GeminiClient(
+            config=GeminiConfig(api_key="test-key", max_retries=1),
+            transport=mock_transport,
+            sleep_fn=self.mock_sleep,
+        )
+
+        with self.assertRaises(GeminiServiceUnavailableError) as ctx:
+            client.generate_candidate_json([self.sample_chunk])
+
+        err_msg = str(ctx.exception)
+        self.assertNotIn("AIzaSyTestSecretKey1234567890123456789", err_msg)
+        self.assertIn("[REDACTED_API_KEY]", err_msg)
+
+    def test_gemini_config_timeout_precedence_explicit_over_env(self) -> None:
+        """Verifies explicit constructor timeout_seconds has higher precedence than GEMINI_TIMEOUT_SECONDS."""
+        old_timeout = os.environ.get("GEMINI_TIMEOUT_SECONDS")
+        try:
+            os.environ["GEMINI_TIMEOUT_SECONDS"] = "45.0"
+            # Explicit constructor value of 90.0 should NOT be overwritten by 45.0
+            config = GeminiConfig(api_key="test-key", timeout_seconds=90.0)
+            self.assertEqual(config.timeout_seconds, 90.0)
+        finally:
+            if old_timeout is not None:
+                os.environ["GEMINI_TIMEOUT_SECONDS"] = old_timeout
+            else:
+                os.environ.pop("GEMINI_TIMEOUT_SECONDS", None)
+
     def test_timeout_retry_exhaustion(self) -> None:
         """Verifies transport timeouts trigger retries and eventually raise GeminiRetryExhaustedError."""
         attempts = 0
@@ -439,6 +510,92 @@ class TestGeminiClient(unittest.TestCase):
             )
         self.assertNotIn(raw_key, str(ctx.exception))
         self.assertIn("[REDACTED]", str(ctx.exception))
+
+    def test_gemini_config_timeout_env_and_default(self) -> None:
+        """Verifies timeout defaults to 60.0s and is configurable via GEMINI_TIMEOUT_SECONDS."""
+        # Default timeout
+        config_default = GeminiConfig(api_key="test-key")
+        self.assertEqual(config_default.timeout_seconds, 60.0)
+
+        # Environment variable override
+        old_timeout = os.environ.get("GEMINI_TIMEOUT_SECONDS")
+        try:
+            os.environ["GEMINI_TIMEOUT_SECONDS"] = "45.5"
+            config_env = GeminiConfig(api_key="test-key")
+            self.assertEqual(config_env.timeout_seconds, 45.5)
+
+            # Invalid env value should not crash; falls back to default
+            os.environ["GEMINI_TIMEOUT_SECONDS"] = "invalid_not_a_number"
+            config_invalid = GeminiConfig(api_key="test-key")
+            self.assertEqual(config_invalid.timeout_seconds, 60.0)
+        finally:
+            if old_timeout is not None:
+                os.environ["GEMINI_TIMEOUT_SECONDS"] = old_timeout
+            else:
+                os.environ.pop("GEMINI_TIMEOUT_SECONDS", None)
+
+    def test_timeout_error_message_includes_timeout_duration(self) -> None:
+        """Verifies GeminiRetryExhaustedError clearly reports the configured timeout duration."""
+        def mock_timing_out_transport(req: urllib.request.Request, timeout: float):
+            raise GeminiTimeoutError("The read operation timed out")
+
+        client = GeminiClient(
+            config=GeminiConfig(api_key="test-key", max_retries=2, timeout_seconds=45.0),
+            transport=mock_timing_out_transport,
+            sleep_fn=self.mock_sleep,
+        )
+
+        with self.assertRaises(GeminiRetryExhaustedError) as ctx:
+            client.generate_candidate_json([self.sample_chunk])
+
+        err_str = str(ctx.exception)
+        self.assertIn("timeout=45.0s", err_str)
+        self.assertIn("2 attempts", err_str)
+        self.assertIn("The read operation timed out", err_str)
+
+
+    def test_build_prompt_payload_embeds_canonical_schema_and_contract(self) -> None:
+        """Verifies build_prompt_payload embeds the canonical schema and required field taxonomy."""
+        client = GeminiClient(config=GeminiConfig(api_key="test-key"))
+        payload = client.build_prompt_payload([self.sample_chunk])
+
+        self.assertIn("contents", payload)
+        self.assertIn("generationConfig", payload)
+        self.assertEqual(payload["generationConfig"]["responseMimeType"], "application/json")
+
+        prompt_text = payload["contents"][0]["parts"][0]["text"]
+
+        # Assert required top-level keys are explicitly mandated in prompt text
+        self.assertIn("schema_version", prompt_text)
+        self.assertIn("1.0.0", prompt_text)
+        self.assertIn("episode_summary", prompt_text)
+        self.assertIn("guest_profile", prompt_text)
+        self.assertIn("journey_milestones", prompt_text)
+        self.assertIn("insights", prompt_text)
+        self.assertIn("quotations", prompt_text)
+        self.assertIn("suggested_tags", prompt_text)
+
+        # Assert insight categories and constraints
+        self.assertIn("Operations", prompt_text)
+        self.assertIn("Fintech", prompt_text)
+        self.assertIn("Technology & Infrastructure", prompt_text)
+        self.assertIn("evidence_segment_indices", prompt_text)
+        self.assertIn("source_segment_indices", prompt_text)
+        self.assertIn("amharic_quote", prompt_text)
+
+        # Assert JSON schema specification is embedded
+        self.assertIn("JSON SCHEMA SPECIFICATION:", prompt_text)
+        self.assertIn("https://meri.et/schemas/gemini_extraction_schema.v1.json", prompt_text)
+
+    def test_build_prompt_payload_uses_explicit_schema_json_str(self) -> None:
+        """Verifies that an explicitly provided schema_json_str is embedded instead of default."""
+        client = GeminiClient(config=GeminiConfig(api_key="test-key"))
+        custom_schema = '{"title": "CustomTestSchema", "type": "object"}'
+        payload = client.build_prompt_payload([self.sample_chunk], schema_json_str=custom_schema)
+
+        prompt_text = payload["contents"][0]["parts"][0]["text"]
+        self.assertIn("CustomTestSchema", prompt_text)
+        self.assertNotIn("https://meri.et/schemas/gemini_extraction_schema.v1.json", prompt_text)
 
 
 if __name__ == "__main__":

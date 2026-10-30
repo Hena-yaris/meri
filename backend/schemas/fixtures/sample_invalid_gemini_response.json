@@ -28,7 +28,7 @@
       "amharic_quote": "short",
       "english_translation": "short",
       "speaker": "Dawit",
-      "source_segment_index": -1,
+      "source_segment_indices": [-1],
       "timestamp_seconds": -50,
       "context": "too short"
     }

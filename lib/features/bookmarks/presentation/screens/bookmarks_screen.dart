@@ -50,8 +50,8 @@ class BookmarksScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: isDark
                     ? AppColors.darkSurfaceElevated
@@ -65,7 +65,7 @@ class BookmarksScreen extends ConsumerWidget {
               ),
               child: Icon(
                 Icons.bookmark_border_rounded,
-                size: 38,
+                size: 26,
                 color: isDark
                     ? AppColors.meriOrangeLight
                     : AppColors.meriOrange,
@@ -73,7 +73,7 @@ class BookmarksScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              'No Saved Episodes',
+              'Your Knowledge Notebook is Empty',
               style: AppTypography.titleLarge(
                 color: isDark ? AppColors.darkTextPrimary : AppColors.inkBlack,
               ),

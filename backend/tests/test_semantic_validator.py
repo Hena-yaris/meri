@@ -128,7 +128,7 @@ class TestSemanticValidator(unittest.TestCase):
                     "amharic_quote": "የቀዝቃዛ ማከማቻ ቴክኖሎጂ በየቦታው ካልተዘረጋ ሰብሉ በሙቀት ይበላሻል።",
                     "english_translation": "If cold storage technology is not deployed across hubs, produce perishes from heat.",
                     "speaker": "Dawit Tadesse",
-                    "source_segment_index": 5,
+                    "source_segment_indices": [5],
                     "timestamp_seconds": 30,
                     "context": "Explaining spoilage risks across agricultural corridors.",
                 }
@@ -237,7 +237,7 @@ class TestSemanticValidator(unittest.TestCase):
                 "amharic_quote": fabricated_text,
                 "english_translation": "The only secret to business in Ethiopia is government support.",
                 "speaker": "Dawit Tadesse",
-                "source_segment_index": 3,
+                "source_segment_indices": [3],
                 "timestamp_seconds": 16,
                 "context": "Fabricated statement.",
             }
@@ -265,7 +265,7 @@ class TestSemanticValidator(unittest.TestCase):
                 "amharic_quote": paraphrased,
                 "english_translation": "If cooling machines are not planted everywhere, vegetables spoil.",
                 "speaker": "Dawit Tadesse",
-                "source_segment_index": 5,
+                "source_segment_indices": [5],
                 "timestamp_seconds": 30,
                 "context": "Paraphrase test.",
             }

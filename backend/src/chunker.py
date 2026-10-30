@@ -26,13 +26,15 @@ def estimate_token_count(text: str) -> int:
 
 def format_chunk_text(segments: List[NormalizedSegment]) -> str:
     """
-    Synthesizes segment texts into a coherent chunk representation
-    with speaker attributions and segment boundary markers for LLM comprehension.
+    Synthesizes segment texts into a coherent chunk representation with speaker attributions,
+    explicit segment indices, and timestamps for LLM comprehension.
+    Format: [Seg <segment_index> | <speaker_label> | <start_seconds>s]: <text>
     """
     lines: List[str] = []
     for seg in segments:
-        lines.append(f"[{seg.speaker_label} {seg.start_seconds}s]: {seg.text}")
+        lines.append(f"[Seg {seg.segment_index} | {seg.speaker_label} | {seg.start_seconds}s]: {seg.text}")
     return "\n".join(lines)
+
 
 
 class TranscriptChunker:

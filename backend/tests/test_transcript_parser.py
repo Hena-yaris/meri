@@ -187,5 +187,109 @@ cue-second-identifier
         self.assertIn("WEBVTT", str(ctx.exception))
 
 
+    def test_positive_youtube_webvtt_inline_timestamps_and_formatting_tags(self) -> None:
+        """Verifies parsing of YouTube auto-generated WebVTT with inline timestamps, <c> tags, and &gt;&gt;."""
+        yt_vtt = (
+            "WEBVTT\n"
+            "Kind: captions\n"
+            "Language: am\n"
+            "\n"
+            "00:00:00.120 --> 00:00:03.709 align:start position:0%\n"
+            " \n"
+            "የንግድ<00:00:00.480><c> ስራ</c><00:00:00.960><c> የመጀመሪያው</c><00:00:01.439><c> እርምጃ።</c>\n"
+            "\n"
+            "00:00:03.709 --> 00:00:03.719 align:start position:0%\n"
+            "የንግድ ስራ የመጀመሪያው እርምጃ።\n"
+            " \n"
+            "\n"
+            "00:00:03.719 --> 00:00:06.630 align:start position:0%\n"
+            "የንግድ ስራ የመጀመሪያው እርምጃ።\n"
+            "&gt;&gt; ሁለተኛው<00:00:04.200><c> ምዕራፍ</c><00:00:04.800><c> ተጀመረ።</c>\n"
+        )
+        cues = parse_webvtt_transcript(yt_vtt)
+        self.assertEqual(len(cues), 3)
+
+        # Cue 1: verify inline timestamps and <c> tags stripped, Amharic text and punctuation preserved
+        c1 = cues[0]
+        self.assertEqual(c1.start_ms, 120)
+        self.assertEqual(c1.end_ms, 3709)
+        self.assertEqual(c1.text, "የንግድ ስራ የመጀመሪያው እርምጃ።")
+        self.assertNotIn("<", c1.text)
+        self.assertNotIn(">", c1.text)
+
+        # Cue 2: intermediate snapshot cue preserved with exact timing
+        c2 = cues[1]
+        self.assertEqual(c2.start_ms, 3709)
+        self.assertEqual(c2.end_ms, 3719)
+        self.assertEqual(c2.text, "የንግድ ስራ የመጀመሪያው እርምጃ።")
+
+        # Cue 3: &gt;&gt; unescaped to >>, tags stripped
+        c3 = cues[2]
+        self.assertEqual(c3.start_ms, 3719)
+        self.assertEqual(c3.end_ms, 6630)
+        self.assertIn(">>", c3.text)
+        self.assertIn("ሁለተኛው ምዕራፍ ተጀመረ።", c3.text)
+        self.assertNotIn("&gt;", c3.text)
+        self.assertNotIn("<c>", c3.text)
+
+    def test_positive_youtube_webvtt_skips_empty_and_formatting_only_cues(self) -> None:
+        """Verifies that cues containing only whitespace or empty formatting tags are safely skipped."""
+        vtt_with_empty = (
+            "WEBVTT\n\n"
+            "00:00:01.000 --> 00:00:02.000\n"
+            "የመጀመሪያው ቃል\n\n"
+            "00:00:02.000 --> 00:00:02.010\n"
+            " \n"
+            " \n\n"
+            "00:00:02.010 --> 00:00:03.000\n"
+            "<c></c>\n\n"
+            "00:00:03.000 --> 00:00:04.000\n"
+            "የሁለተኛው ቃል\n"
+        )
+        cues = parse_webvtt_transcript(vtt_with_empty)
+        self.assertEqual(len(cues), 2)
+        self.assertEqual(cues[0].text, "የመጀመሪያው ቃል")
+        self.assertEqual(cues[0].start_ms, 1000)
+        self.assertEqual(cues[0].end_ms, 2000)
+        self.assertEqual(cues[1].text, "የሁለተኛው ቃል")
+        self.assertEqual(cues[1].start_ms, 3000)
+        self.assertEqual(cues[1].end_ms, 4000)
+
+    def test_negative_webvtt_document_with_only_empty_cues_fails(self) -> None:
+        """Verifies that a WebVTT file with zero non-empty cues raises MalformedCueError."""
+        all_empty_vtt = (
+            "WEBVTT\n\n"
+            "00:00:01.000 --> 00:00:02.000\n"
+            " \n\n"
+            "00:00:02.000 --> 00:00:03.000\n"
+            "<c></c>\n"
+        )
+        with self.assertRaises(MalformedCueError) as ctx:
+            parse_webvtt_transcript(all_empty_vtt)
+        self.assertIn("no cue blocks", str(ctx.exception))
+
+    def test_negative_webvtt_malformed_timecode_line_rejected(self) -> None:
+        """Verifies that WebVTT cues with malformed timecode syntax are rejected."""
+        malformed_timecode_vtt = """WEBVTT
+
+00:00:01.000 --> invalid_timecode
+የሙከራ ጽሁፍ
+"""
+        with self.assertRaises(MalformedCueError) as ctx:
+            parse_webvtt_transcript(malformed_timecode_vtt)
+        self.assertIn("invalid timecode format", str(ctx.exception))
+
+    def test_negative_webvtt_inverted_timecode_rejected(self) -> None:
+        """Verifies that WebVTT cues with end time earlier than start time are rejected."""
+        inverted_vtt = """WEBVTT
+
+00:00:10.000 --> 00:00:05.000
+የተሳሳተ የጊዜ ሰሌዳ
+"""
+        with self.assertRaises(InvalidTimestampError) as ctx:
+            parse_webvtt_transcript(inverted_vtt)
+        self.assertIn("earlier than start time", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

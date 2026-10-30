@@ -165,7 +165,7 @@ void showEpisodeDetailsBottomSheet(BuildContext context, Episode episode) {
                     children: [
                       Text(
                         '“${episode.quotations.first.amharicQuote}”',
-                        style: AppTypography.quotation(
+                        style: AppTypography.amharicQuotation(
                           color: isDark
                               ? AppColors.darkTextPrimary
                               : AppColors.inkBlack,

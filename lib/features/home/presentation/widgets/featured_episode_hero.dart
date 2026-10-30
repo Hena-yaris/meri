@@ -26,99 +26,93 @@ class FeaturedEpisodeHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final quotation = episode.quotations.isNotEmpty ? episode.quotations.first : null;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? AppColors.darkTextPrimary : AppColors.inkBlack;
+    final secondaryTextColor = isDark ? AppColors.darkTextSecondary : AppColors.stoneGray;
+    final accentColor = isDark ? AppColors.meriOrangeLight : AppColors.meriOrange;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       child: Material(
-        color: Colors.transparent,
+        color: isDark ? AppColors.darkSurface : AppColors.paperLight,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardRadius,
+          side: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.archiveSandBorder,
+            width: 1,
+          ),
+        ),
         child: InkWell(
           onTap: onTap,
           borderRadius: AppRadius.cardRadius,
-          child: Container(
-            decoration: BoxDecoration(
-              // Solid editorial Ink Black card with subtle texture for high contrast
-              color: isDark ? AppColors.darkSurface : AppColors.inkBlack,
-              borderRadius: AppRadius.cardRadius,
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : AppColors.inkBlack,
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.inkBlack.withValues(alpha: isDark ? 0.3 : 0.08),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+          child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Header: Eyebrow & Duration
+                // 1. Episode Number, Duration, and Bookmark Control
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     EditorialBadge(
-                      label: 'Masterclass • #${episode.episodeNumber}',
-                      variant: EditorialBadgeVariant.orange,
+                      label: 'Episode #${episode.episodeNumber} • ${episode.formattedDuration}',
+                      variant: EditorialBadgeVariant.sand,
                     ),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.schedule_rounded,
-                          size: 13,
-                          color: AppColors.archiveSand,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text(
-                          episode.formattedDuration,
-                          style: AppTypography.labelSmall(
-                            color: AppColors.archiveSand,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        _FeaturedBookmarkButton(episodeId: episode.id),
-                      ],
-                    ),
+                    _FeaturedBookmarkButton(episodeId: episode.id),
                   ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                // Episode Title (Playfair Display)
-                Text(
-                  episode.title,
-                  style: AppTypography.titleLarge(
-                    color: AppColors.warmIvory,
-                  ).copyWith(fontSize: 21, height: 1.3),
                 ),
                 const SizedBox(height: AppSpacing.sm),
 
-                // Summary (Inter)
+                // 2. Prominent Editorial Headline
+                Text(
+                  episode.title,
+                  style: AppTypography.headlineLarge(color: primaryTextColor),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+
+                // 3. Guest Name and Professional Role
+                Text(
+                  episode.guest.name,
+                  style: AppTypography.titleMedium(
+                    color: primaryTextColor,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (episode.guest.title.isNotEmpty || episode.guest.company.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    [
+                      if (episode.guest.title.isNotEmpty) episode.guest.title,
+                      if (episode.guest.company.isNotEmpty) episode.guest.company,
+                    ].join(', '),
+                    style: AppTypography.bodySmall(
+                      color: accentColor,
+                    ).copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.sm),
+
+                // Summary Excerpt
                 Text(
                   episode.summary,
-                  style: AppTypography.bodyMedium(
-                    color: AppColors.archiveSand,
-                  ),
+                  style: AppTypography.bodyMedium(color: secondaryTextColor),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: AppSpacing.md),
 
-                // Featured Quote callout if available
+                // 4. Authentic Amharic Quotation Callout (if available)
                 if (quotation != null) ...[
+                  const SizedBox(height: AppSpacing.md),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.sm,
+                    padding: const EdgeInsets.only(
+                      left: AppSpacing.md,
+                      top: AppSpacing.xxs,
+                      bottom: AppSpacing.xxs,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: AppRadius.roundedXs,
-                      border: const Border(
+                      border: Border(
                         left: BorderSide(
-                          color: AppColors.meriOrange,
-                          width: 3,
+                          color: accentColor,
+                          width: 2.5,
                         ),
                       ),
                     ),
@@ -127,90 +121,44 @@ class FeaturedEpisodeHero extends StatelessWidget {
                       children: [
                         Text(
                           '“${quotation.amharicQuote}”',
-                          style: AppTypography.quotation(
-                            color: AppColors.warmIvory,
-                          ).copyWith(fontSize: 13.5),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                quotation.englishTranslation,
-                                style: AppTypography.bodySmall(
-                                  color: AppColors.archiveSand,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(
-                              '@ ${quotation.formattedTimestamp}',
-                              style: AppTypography.labelSmall(
-                                color: AppColors.stoneGrayLight,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-
-                // Guest Info Bar & Action
-                Divider(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  height: 1,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppColors.meriOrange,
-                      child: Text(
-                        _getInitials(episode.guest.name),
-                        style: AppTypography.labelLarge(
-                          color: Colors.white,
-                        ).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            episode.guest.name,
-                            style: AppTypography.labelLarge(
-                              color: AppColors.warmIvory,
-                            ),
+                          style: AppTypography.amharicQuotation(
+                            color: primaryTextColor,
+                            fontSize: 14.5,
                           ),
+                        ),
+                        if (quotation.englishTranslation.trim().isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.xxs),
                           Text(
-                            '${episode.guest.title}, ${episode.guest.company}',
+                            quotation.englishTranslation,
                             style: AppTypography.bodySmall(
-                              color: AppColors.stoneGrayLight,
+                              color: secondaryTextColor,
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.xs),
-                      decoration: BoxDecoration(
-                        color: AppColors.meriOrange.withValues(alpha: 0.18),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 15,
-                        color: AppColors.meriOrange,
-                      ),
+                  ),
+                ],
+
+                // 5. Clear Action to Read Full Briefing
+                const SizedBox(height: AppSpacing.md),
+                const Divider(),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Read Full Briefing',
+                      style: AppTypography.labelLarge(
+                        color: accentColor,
+                      ).copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 16,
+                      color: accentColor,
                     ),
                   ],
                 ),
@@ -220,14 +168,6 @@ class FeaturedEpisodeHero extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return parts.first.isNotEmpty ? parts.first[0].toUpperCase() : 'M';
   }
 }
 
@@ -244,21 +184,24 @@ class _FeaturedBookmarkButton extends ConsumerWidget {
     return Semantics(
       button: true,
       label: isBookmarked ? 'Remove bookmark' : 'Bookmark episode',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          ref.read(bookmarksProvider.notifier).toggleBookmark(episodeId);
-        },
-        child: Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.xs),
-          child: Icon(
-            isBookmarked
-                ? Icons.bookmark_rounded
-                : Icons.bookmark_border_rounded,
-            size: 20,
-            color: isBookmarked
-                ? AppColors.meriOrangeLight
-                : AppColors.archiveSand,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            ref.read(bookmarksProvider.notifier).toggleBookmark(episodeId);
+          },
+          child: Center(
+            child: Icon(
+              isBookmarked
+                  ? Icons.bookmark_rounded
+                  : Icons.bookmark_border_rounded,
+              size: 20,
+              color: isBookmarked
+                  ? AppColors.meriOrangeLight
+                  : AppColors.archiveSand,
+            ),
           ),
         ),
       ),

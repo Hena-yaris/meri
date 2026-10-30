@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Meri Core Brand Palette -->
+    <color name="meri_orange">#F47724</color>
+    <color name="ink_black">#191A18</color>
+    <color name="warm_ivory">#F7F3EB</color>
+    <color name="archive_sand">#D8C9AE</color>
+    <color name="stone_gray">#686B67</color>
+
+    <!-- Launcher Icon Colors -->
+    <color name="ic_launcher_background">#191A18</color>
+
+    <!-- Splash Screen Colors (Light Mode) -->
+    <color name="splash_background">#F7F3EB</color>
+    <color name="splash_bar_primary">#F47724</color>
+    <color name="splash_bar_secondary">#191A18</color>
+    <color name="splash_bar_tertiary">#D8C9AE</color>
+</resources>
