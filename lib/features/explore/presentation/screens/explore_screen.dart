@@ -15,13 +15,10 @@ class ExploreScreen extends ConsumerStatefulWidget {
 
   static const List<String> topics = [
     'All',
-    'Agritech',
-    'Fintech',
-    'Manufacturing',
-    'Export & Trade',
-    'Supply Chain',
-    'Capital & Funding',
-    'Hiring & Leadership',
+    'Brand Strategy',
+    'Creative Economy',
+    'Service Operations',
+    'Vocational Training',
   ];
 
   @override
@@ -62,6 +59,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final activeQuery = ref.watch(exploreSearchQueryProvider);
     final activeTopic = ref.watch(exploreSelectedTopicProvider);
     final episodesAsync = ref.watch(exploreFilteredEpisodesProvider);
+    final availableTopics = ref.watch(availableTopicsProvider);
+    final displayedTopics = availableTopics.isNotEmpty ? availableTopics : ExploreScreen.topics;
 
     // Keep text controller synchronized if cleared externally
     ref.listen<String>(exploreSearchQueryProvider, (previous, next) {
@@ -151,10 +150,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               scrollDirection: Axis.horizontal,
-              itemCount: ExploreScreen.topics.length,
+              itemCount: displayedTopics.length,
               separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
               itemBuilder: (context, index) {
-                final topic = ExploreScreen.topics[index];
+                final topic = displayedTopics[index];
                 final isAll = topic.toLowerCase() == 'all';
                 final isSelected = isAll
                     ? (activeTopic == null)
@@ -166,7 +165,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   showCheckmark: false,
                   labelStyle: AppTypography.labelSmall(
                     color: isSelected
-                        ? (isDark ? AppColors.darkTextPrimary : Colors.white)
+                        ? (isDark ? AppColors.meriOrangeLight : AppColors.meriOrange)
                         : (isDark ? AppColors.darkTextPrimary : AppColors.inkBlack),
                   ).copyWith(
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
@@ -174,12 +173,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                   backgroundColor:
                       isDark ? AppColors.darkSurface : AppColors.paperLight,
                   selectedColor: isDark
-                      ? AppColors.meriOrange.withValues(alpha: 0.35)
-                      : AppColors.meriOrange,
+                      ? AppColors.darkSurfaceElevated
+                      : AppColors.archiveSandLight,
                   side: BorderSide(
                     color: isSelected
                         ? (isDark ? AppColors.meriOrangeLight : AppColors.meriOrange)
                         : (isDark ? AppColors.darkBorder : AppColors.archiveSandBorder),
+                    width: isSelected ? 1.5 : 1.0,
                   ),
                   shape: const RoundedRectangleBorder(
                     borderRadius: AppRadius.roundedSm,
@@ -289,7 +289,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
           children: [
             Icon(
               Icons.search_off_rounded,
-              size: 52,
+              size: 32,
               color: isDark ? AppColors.darkTextMuted : AppColors.stoneGray,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -302,7 +302,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             const SizedBox(height: AppSpacing.xs),
             Text(
               criteriaString.isNotEmpty
-                  ? 'No episodes matched $criteriaString. Try broader terms or select "All".'
+                  ? 'No interview records matched $criteriaString. Try broader terms or select "All".'
                   : 'No interview records match the selected criteria.',
               style: AppTypography.bodySmall(
                 color: isDark ? AppColors.darkTextMuted : AppColors.stoneGray,

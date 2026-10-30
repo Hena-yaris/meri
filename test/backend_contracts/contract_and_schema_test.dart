@@ -170,7 +170,11 @@ void main() {
         expect((q['amharic_quote'] as String).length, greaterThanOrEqualTo(10));
         expect((q['english_translation'] as String).length, greaterThanOrEqualTo(10));
         expect(q['speaker'], isNotEmpty);
-        expect((q['source_segment_index'] as int), greaterThanOrEqualTo(0));
+        final segIndices = q.containsKey('source_segment_indices')
+            ? (q['source_segment_indices'] as List<dynamic>)
+            : [(q['source_segment_index'] as int)];
+        expect(segIndices.isNotEmpty, isTrue);
+        expect((segIndices.first as int), greaterThanOrEqualTo(0));
         expect((q['timestamp_seconds'] as int), greaterThanOrEqualTo(0));
         expect((q['context'] as String).length, greaterThanOrEqualTo(15));
       }
@@ -218,7 +222,10 @@ void main() {
       // Negative timestamp
       expect((badQuote['timestamp_seconds'] as int) < 0, isTrue);
       // Negative segment index
-      expect((badQuote['source_segment_index'] as int) < 0, isTrue);
+      final badSegIndices = badQuote.containsKey('source_segment_indices')
+          ? (badQuote['source_segment_indices'] as List<dynamic>)
+          : [(badQuote['source_segment_index'] as int)];
+      expect((badSegIndices.first as int) < 0, isTrue);
     });
 
     // =========================================================================

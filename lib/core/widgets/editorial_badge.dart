@@ -24,12 +24,22 @@ class EditorialBadge extends StatelessWidget {
     super.key,
     required this.label,
     this.icon,
+    this.trailingIcon,
     this.variant = EditorialBadgeVariant.muted,
+    this.onTap,
+    this.semanticLabel,
+    this.maxLines = 1,
+    this.overflow = TextOverflow.ellipsis,
   });
 
   final String label;
   final IconData? icon;
+  final IconData? trailingIcon;
   final EditorialBadgeVariant variant;
+  final VoidCallback? onTap;
+  final String? semanticLabel;
+  final int maxLines;
+  final TextOverflow overflow;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +81,7 @@ class EditorialBadge extends StatelessWidget {
         break;
     }
 
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.xs,
@@ -79,7 +89,12 @@ class EditorialBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: AppRadius.roundedXs,
-        border: Border.all(color: borderColor, width: 0.8),
+        border: Border.all(
+          color: onTap != null
+              ? (isDark ? AppColors.meriOrangeLight : AppColors.meriOrange)
+              : borderColor,
+          width: onTap != null ? 1.0 : 0.8,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -88,15 +103,49 @@ class EditorialBadge extends StatelessWidget {
             Icon(icon, size: 12, color: textColor),
             const SizedBox(width: AppSpacing.xs),
           ],
-          Text(
-            label.toUpperCase(),
-            style: AppTypography.eyebrow(color: textColor).copyWith(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              style: AppTypography.eyebrow(color: textColor).copyWith(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: maxLines,
+              overflow: overflow,
             ),
           ),
+          if (trailingIcon != null) ...[
+            const SizedBox(width: AppSpacing.xs),
+            Icon(trailingIcon, size: 12, color: textColor),
+          ],
         ],
       ),
     );
+
+    if (onTap != null) {
+      return Semantics(
+        button: true,
+        label: semanticLabel ?? label,
+        excludeSemantics: true,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: AppRadius.roundedXs,
+            child: content,
+          ),
+        ),
+      );
+    }
+
+    if (semanticLabel != null) {
+      return Semantics(
+        label: semanticLabel,
+        excludeSemantics: true,
+        child: content,
+      );
+    }
+
+    return content;
   }
 }

@@ -60,10 +60,62 @@ abstract class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.paperLight,
         elevation: 0,
+        shadowColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.cardRadius,
           side: const BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.paperLight,
+        surfaceTintColor: Colors.transparent,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.sheetRadius,
+          side: BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.paperLight,
+        surfaceTintColor: Colors.transparent,
+        elevation: 3,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedSm,
+          side: BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+        titleTextStyle: AppTypography.titleLarge(color: AppColors.inkBlack),
+        contentTextStyle: AppTypography.bodyMedium(color: AppColors.stoneGray),
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: AppColors.paperLight,
+        surfaceTintColor: Colors.transparent,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedSm,
+          side: BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.paperLight,
+        border: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+        enabledBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.archiveSandBorder, width: 1),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.meriOrange, width: 1.5),
+        ),
+        hintStyle: AppTypography.bodySmall(color: AppColors.stoneGray),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -201,10 +253,62 @@ abstract class AppTheme {
       cardTheme: CardThemeData(
         color: AppColors.darkSurface,
         elevation: 0,
+        shadowColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.cardRadius,
           side: const BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppColors.darkSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.sheetRadius,
+          side: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.darkSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 3,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedSm,
+          side: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+        titleTextStyle: AppTypography.titleLarge(color: AppColors.darkTextPrimary),
+        contentTextStyle: AppTypography.bodyMedium(color: AppColors.darkTextSecondary),
+      ),
+      popupMenuTheme: const PopupMenuThemeData(
+        color: AppColors.darkSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedSm,
+          side: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.darkSurfaceElevated,
+        border: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+        enabledBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: AppRadius.roundedSm,
+          borderSide: BorderSide(color: AppColors.meriOrangeLight, width: 1.5),
+        ),
+        hintStyle: AppTypography.bodySmall(color: AppColors.darkTextMuted),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(

@@ -88,6 +88,10 @@ class NormalizedSegment:
     confidence: Optional[float] = None
     original_start_ms: Optional[int] = None
     original_end_ms: Optional[int] = None
+    source_cue_indices: Optional[List[int]] = None
+    reconstruction_method: Optional[str] = None
+    is_ambiguous: bool = False
+    uncertainty_reason: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.segment_index < 0:
@@ -140,6 +144,48 @@ class NormalizedSegment:
         Convenience helper producing an INSERT-safe dictionary with generated columns omitted.
         """
         return self.to_db_dict(episode_id=episode_id, include_generated=False)
+
+
+@dataclass(frozen=True)
+class ReconstructedSpeechSpan:
+    """
+    A reconstructed spoken speech utterance with complete source cue provenance.
+    Synthesized from rolling caption snapshots into a discrete spoken segment.
+    """
+    span_index: int
+    start_ms: int
+    end_ms: int
+    start_seconds: float
+    text: str
+    speaker_label: str
+    source_cue_indices: List[int]
+    source_intervals: List[tuple[int, int]]
+    reconstruction_method: str
+    is_ambiguous: bool = False
+    uncertainty_reason: Optional[str] = None
+    language_code: str = "am"
+    acquisition_method: str = "youtube_caption_auto"
+    confidence: float = 1.0
+
+    def to_normalized_segment(self) -> NormalizedSegment:
+        """Converts the reconstructed speech span to a standard NormalizedSegment atom."""
+        return NormalizedSegment(
+            segment_index=self.span_index,
+            start_ms=self.start_ms,
+            end_ms=self.end_ms,
+            start_seconds=self.start_seconds,
+            speaker_label=self.speaker_label,
+            language_code=self.language_code,
+            acquisition_method=self.acquisition_method,
+            text=self.text,
+            confidence=self.confidence if not self.is_ambiguous else 0.5,
+            original_start_ms=self.source_intervals[0][0] if self.source_intervals else self.start_ms,
+            original_end_ms=self.source_intervals[-1][1] if self.source_intervals else self.end_ms,
+            source_cue_indices=self.source_cue_indices,
+            reconstruction_method=self.reconstruction_method,
+            is_ambiguous=self.is_ambiguous,
+            uncertainty_reason=self.uncertainty_reason,
+        )
 
 
 @dataclass(frozen=True)

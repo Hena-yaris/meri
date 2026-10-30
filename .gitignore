@@ -48,4 +48,11 @@ app.*.map.json
 # Supabase CLI local cache
 supabase/.temp/
 
+# Python Virtual Environments & Local Secrets
+.venv/
+venv/
 .env
+.env.*
+
+# Local extraction validation reports
+reports/

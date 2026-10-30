@@ -430,19 +430,65 @@ class SyntacticValidator:
                             )
                         )
 
-                # Require source_segment_index (int) OR source_segment_indices (list of ints)
-                has_single = "source_segment_index" in q
+                # Require canonical source_segment_indices (list of ints) or support legacy source_segment_index (int)
                 has_multi = "source_segment_indices" in q
-                if not has_single and not has_multi:
+                has_single = "source_segment_index" in q
+                if not has_multi and not has_single:
                     errors.append(
                         ValidationErrorItem(
                             item_type="quotation",
                             item_index=idx,
-                            field="source_segment_index",
+                            field="source_segment_indices",
                             error_code=ValidationErrorCode.MISSING_REQUIRED_KEY,
-                            message=f"quotation at index {idx} must declare 'source_segment_index' or 'source_segment_indices'.",
+                            message=f"quotation at index {idx} missing required field 'source_segment_indices'.",
                         )
                     )
+                elif has_multi:
+                    indices_val = q.get("source_segment_indices")
+                    if not isinstance(indices_val, list):
+                        errors.append(
+                            ValidationErrorItem(
+                                item_type="quotation",
+                                item_index=idx,
+                                field="source_segment_indices",
+                                error_code=ValidationErrorCode.TYPE_MISMATCH,
+                                message="source_segment_indices must be an array of integers.",
+                            )
+                        )
+                    elif len(indices_val) < 1:
+                        errors.append(
+                            ValidationErrorItem(
+                                item_type="quotation",
+                                item_index=idx,
+                                field="source_segment_indices",
+                                error_code=ValidationErrorCode.ARRAY_COUNT_OUT_OF_BOUNDS,
+                                message="source_segment_indices must contain at least 1 segment index.",
+                            )
+                        )
+                    else:
+                        for s_idx in indices_val:
+                            if not isinstance(s_idx, int) or isinstance(s_idx, bool) or s_idx < 0:
+                                errors.append(
+                                    ValidationErrorItem(
+                                        item_type="quotation",
+                                        item_index=idx,
+                                        field="source_segment_indices",
+                                        error_code=ValidationErrorCode.TYPE_MISMATCH,
+                                        message=f"source segment index '{s_idx}' must be a non-negative integer.",
+                                    )
+                                )
+                elif has_single:
+                    single_val = q.get("source_segment_index")
+                    if not isinstance(single_val, int) or isinstance(single_val, bool) or single_val < 0:
+                        errors.append(
+                            ValidationErrorItem(
+                                item_type="quotation",
+                                item_index=idx,
+                                field="source_segment_index",
+                                error_code=ValidationErrorCode.TYPE_MISMATCH,
+                                message=f"legacy source_segment_index '{single_val}' must be a non-negative integer.",
+                            )
+                        )
 
                 quote_text = q.get("amharic_quote")
                 if isinstance(quote_text, str) and len(quote_text) < 10:

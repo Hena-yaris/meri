@@ -1,35 +1,47 @@
 """
-Meri Content Pipeline: Milestone 5.3.3 Local Ingestion Integration Test Suite.
+Meri Content Pipeline: Milestone 7.2 Synthetic Pipeline Integration Test Suite.
 
-Deterministic local integration test that exercises the actual JobWorker,
-PipelineOrchestrator, and CandidatePersistenceService against a disposable local
-PostgreSQL database running in Docker container 'leyu_postgres', with Gemini transport
-mocked deterministically and zero external network access.
+Deterministic local integration test suite that exercises the actual JobWorker,
+PipelineOrchestrator, and CandidatePersistenceService against an isolated disposable local
+PostgreSQL database running in Docker container 'leyu_postgres', with the test-only
+DeterministicFakeExtractor and zero external network access.
 
 Test Scenarios Covered:
-1. Positive End-to-End Ingestion:
-   - Full worker lifecycle: atomic claim, preflight, transcript acquisition, in-memory AI extraction,
+1. Positive End-to-End Ingestion (test_01):
+   - Full worker lifecycle: atomic claim, preflight, transcript acquisition, in-memory fake extraction,
      atomic candidate persistence, and stage updates to human_review.
    - Comprehensive schema validation: processing_jobs, episodes (remains draft), transcript_segments,
-     transcript_chunks, extraction_runs, insights, quotations, insight_evidence, and quotation_segments.
+     start_seconds generated column, transcript_chunks, extraction_runs, insights, quotations,
+     insight_evidence, and quotation_segments.
    - Verified relational provenance and foreign-key integrity.
    - Isolation check: asserts zero writes to unrelated episodes or jobs.
-2. Operator Confirmation Safety:
-   - Rejection of missing or whitespace-only confirmation before Gemini transport invocation.
-3. Video ID Integrity Safety:
-   - Rejection of mismatched YouTube video ID before Gemini transport invocation.
-4. Editorial Protection & Rollback Safety:
+2. Operator Confirmation Safety (test_02):
+   - Rejection of missing or whitespace-only confirmation before AI extraction invocation.
+3. Video ID Integrity Safety (test_03):
+   - Rejection of mismatched YouTube video ID before AI extraction invocation.
+4. Editorial Protection Against Verified Content (test_04):
    - Rejection of rerun against episodes containing verified editorial approvals.
-   - Immediate transaction rollback preserving pre-existing verified content intact.
-5. Published Episode Protection:
+   - Immediate rejection preserving pre-existing verified content intact.
+5. Published Episode Protection (test_05):
    - Rejection of rerun against published episodes.
-6. Disposable Database Lifecycle & Isolation:
+6. Atomic Rollback on Mid-Persistence Failure (test_06):
+   - Controlled database exception injected mid-persistence (on quotations insert).
+   - Verifies persistence transaction rolls back all in-progress writes completely.
+   - Asserts zero orphaned segments, chunks, extraction runs, insights, quotations, or evidence.
+   - Confirms job failure status is committed in a separate transaction.
+7. Candidate Collision and Authorized Rerun Lifecycle (test_07):
+   - Unreviewed candidates strictly block rerun when allow_candidate_rerun=False.
+   - Rerun with allow_candidate_rerun=True cleans up prior unreviewed candidates and runs
+     in foreign-key-safe order and persists fresh candidates cleanly.
+8. Job vs Episode Video ID Identity Mismatch (test_08):
+   - Rejects execution when job video ID mismatches episode video ID before AI extraction.
+9. Disposable Database Lifecycle & Isolation (test_09):
    - Creation, migration, and strict isolation of disposable test database.
    - Cleanup trap drops only the disposable test database, leaving pre-existing databases untouched.
-7. Adapter Transaction Rollback & Type Preservation:
-   - Manual-commit transaction rollback and commit semantics.
-   - Session recovery and error surfacing.
-   - Strict data type preservation (integers, floats, booleans, nulls, dicts, lists).
+10. Adapter Transaction Rollback & Type Preservation (test_10):
+    - Manual-commit transaction rollback and commit semantics.
+    - Session recovery and error surfacing.
+    - Strict data type preservation (integers, floats, booleans, nulls, dicts, lists).
 """
 
 import json
@@ -49,7 +61,11 @@ from backend.src.extraction_models import ValidationStatus
 from backend.src.gemini_client import GeminiClient, GeminiConfig
 from backend.src.job_worker import JobWorker, JobWorkerResult, StaticTranscriptProvider
 from backend.src.pipeline_orchestrator import EditorialProtectionError, PipelineOrchestrator
-from backend.tests.test_pipeline_orchestrator import create_sample_gemini_response_payload
+from backend.tests.fake_extraction_provider import (
+    SYNTHETIC_MODEL_ID,
+    DeterministicFakeExtractor,
+    create_deterministic_synthetic_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +351,40 @@ class LocalPsqlConnection:
         self.close()
 
 
+class FailingLocalPsqlCursor(LocalPsqlCursor):
+    """
+    Focused cursor proxy that raises a simulated database exception when a specific
+    SQL query substring is encountered, enabling controlled mid-persistence rollback testing.
+    """
+
+    def __init__(self, connection: "LocalPsqlConnection", fail_on_query_substring: str) -> None:
+        super().__init__(connection)
+        self.fail_on_query_substring = fail_on_query_substring
+
+    def execute(self, query: str, params: Optional[Sequence[Any]] = None) -> "LocalPsqlCursor":
+        clean_q = " ".join(query.strip().split())
+        if self.fail_on_query_substring and self.fail_on_query_substring in clean_q:
+            raise RuntimeError(f"Simulated mid-persistence database failure during: {self.fail_on_query_substring}")
+        return super().execute(query, params)
+
+
+class FailingLocalPsqlConnection(LocalPsqlConnection):
+    """Local connection returning a FailingLocalPsqlCursor for controlled failure injection."""
+
+    def __init__(
+        self,
+        db_name: str,
+        fail_on_query_substring: str,
+        container_name: str = CONTAINER_NAME,
+        db_user: str = DB_USER,
+    ) -> None:
+        super().__init__(db_name, container_name=container_name, db_user=db_user)
+        self.fail_on_query_substring = fail_on_query_substring
+
+    def cursor(self) -> FailingLocalPsqlCursor:
+        return FailingLocalPsqlCursor(self, self.fail_on_query_substring)
+
+
 # =============================================================================
 # Integration Test Case
 # =============================================================================
@@ -433,40 +483,34 @@ class TestLocalIngestionIntegration(unittest.TestCase):
             return conn
         return factory
 
-    def _build_mock_gemini_client(self, timeline_hook: Optional[List[str]] = None) -> Tuple[GeminiClient, List[int]]:
-        """Constructs a GeminiClient configured with a deterministic mock transport."""
-        invocations = [0]
-        raw_response = {
-            "candidates": [
-                {
-                    "content": {
-                        "parts": [{"text": json.dumps(create_sample_gemini_response_payload())}]
-                    }
-                }
-            ],
-            "usageMetadata": {
-                "promptTokenCount": 500,
-                "candidatesTokenCount": 250,
-            },
-        }
-        api_response_body = json.dumps(raw_response)
+    def _get_failing_connection_factory(
+        self,
+        fail_on_query_substring: str,
+    ) -> Callable[[], LocalPsqlConnection]:
+        """
+        Returns connection factory yielding FailingLocalPsqlConnection that raises
+        a simulated database exception whenever fail_on_query_substring is executed.
+        """
+        def factory() -> LocalPsqlConnection:
+            conn = FailingLocalPsqlConnection(
+                self.temp_db,
+                fail_on_query_substring=fail_on_query_substring,
+                container_name=CONTAINER_NAME,
+                db_user=DB_USER,
+            )
+            self._opened_connections.append(conn)
+            return conn
+        return factory
 
-        def mock_transport(req: urllib.request.Request, timeout: float) -> Tuple[int, Dict[str, str], str]:
-            invocations[0] += 1
-            if timeline_hook is not None:
-                timeline_hook.append("gemini_call")
-            return 200, {}, api_response_body
-
-        client = GeminiClient(
-            config=GeminiConfig(model_id="gemini-2.0-flash", api_key="test-synthetic-mock-key"),
-            transport=mock_transport,
-        )
-        return client, invocations
+    def _build_fake_extractor(self, failure_mode: Optional[str] = None) -> DeterministicFakeExtractor:
+        """Constructs a test-only DeterministicFakeExtractor."""
+        return DeterministicFakeExtractor(failure_mode=failure_mode)
 
     def test_01_positive_end_to_end_ingestion(self) -> None:
         """
         Exercises the complete end-to-end ingestion pipeline with actual JobWorker,
-        PipelineOrchestrator, and PostgreSQL persistence against the disposable database.
+        PipelineOrchestrator, DeterministicFakeExtractor, and PostgreSQL persistence
+        against the isolated disposable local database.
         """
         conn_factory = self._get_connection_factory()
 
@@ -474,12 +518,13 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         guest_id = str(uuid.uuid4())
         episode_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
-        video_id = "sample101"
+        video_id = "synth_ep101"
 
         # Seed unrelated episode and job to verify no accidental cross-writes
         unrelated_guest_id = str(uuid.uuid4())
         unrelated_episode_id = str(uuid.uuid4())
         unrelated_job_id = str(uuid.uuid4())
+        unrelated_video_id = "synth_unrel"
 
         seed_conn = conn_factory()
         cur = seed_conn.cursor()
@@ -490,7 +535,7 @@ class TestLocalIngestionIntegration(unittest.TestCase):
             INSERT INTO guests (id, slug, name, title, company, bio, industry)
             VALUES (%s, %s, %s, %s, %s, %s, %s);
             """,
-            (guest_id, f"synth-guest-{guest_id[:8]}", "Dawit Tadesse", "Managing Director", "Nile Cold Chain", "Bio", "Logistics"),
+            (guest_id, f"synth-guest-{guest_id[:8]}", "Dawit Tadesse", "Managing Director", "Nile Cold Chain", "Synthetic Bio", "Logistics"),
         )
         cur.execute(
             """
@@ -513,31 +558,30 @@ class TestLocalIngestionIntegration(unittest.TestCase):
             INSERT INTO guests (id, slug, name, title, company, bio, industry)
             VALUES (%s, %s, %s, %s, %s, %s, %s);
             """,
-            (unrelated_guest_id, f"synth-unrelated-{unrelated_guest_id[:8]}", "Unrelated Guest", "Title", "Co", "Bio", "Fintech"),
+            (unrelated_guest_id, f"synth-unrelated-{unrelated_guest_id[:8]}", "Unrelated Synthetic Guest", "Title", "Co", "Bio", "Fintech"),
         )
         cur.execute(
             """
             INSERT INTO episodes (id, legacy_id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s, 'draft', %s, %s);
             """,
-            (unrelated_episode_id, f"ep-unrelated-{unrelated_episode_id[:8]}", 902, "Unrelated Episode", "Summary", unrelated_guest_id, 45, "https://youtu.be/unrelated01", "unrelated01"),
+            (unrelated_episode_id, f"ep-unrelated-{unrelated_episode_id[:8]}", 902, "Unrelated Synthetic Episode", "Summary", unrelated_guest_id, 45, f"https://youtu.be/{unrelated_video_id}", unrelated_video_id),
         )
         cur.execute(
             """
             INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
             VALUES (%s, %s, %s, %s, 'pending', 'submission');
             """,
-            (unrelated_job_id, unrelated_episode_id, "https://youtu.be/unrelated01", "unrelated01"),
+            (unrelated_job_id, unrelated_episode_id, f"https://youtu.be/{unrelated_video_id}", unrelated_video_id),
         )
 
         seed_conn.commit()
         cur.close()
         seed_conn.close()
 
-        # Build worker with mock Gemini transport
-        timeline: List[str] = []
-        gemini_client, mock_invocations = self._build_mock_gemini_client(timeline_hook=timeline)
-        orchestrator = PipelineOrchestrator(gemini_client=gemini_client)
+        # Build worker with test-only DeterministicFakeExtractor
+        fake_extractor = self._build_fake_extractor()
+        orchestrator = PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client())
 
         with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
             transcript_content = json.load(f)
@@ -560,7 +604,7 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         self.assertEqual(result.stage, "human_review")
         self.assertIsNone(result.error)
         self.assertIsNotNone(result.pipeline_result)
-        self.assertEqual(mock_invocations[0], 1)
+        self.assertEqual(fake_extractor.call_count, 1)
 
         # ---------------------------------------------------------------------
         # Database Schema Assertions
@@ -629,55 +673,89 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         self.assertIsNotNone(run_row)
         self.assertEqual(run_row[0], 1)
         self.assertEqual(run_row[1], "passed")
-        self.assertEqual(run_row[2], "gemini-2.0-flash")
+        self.assertEqual(run_row[2], SYNTHETIC_MODEL_ID)
 
-        # 6. Candidate insights: strictly 'candidate' review_status
+        # 6. Candidate insights: strictly 'candidate' review_status, matching deterministic fake
         v_cur.execute(
-            "SELECT id, title, category, review_status FROM insights WHERE episode_id = %s;",
+            "SELECT id, title, category, review_status FROM insights WHERE episode_id = %s ORDER BY display_order ASC;",
             (episode_id,),
         )
         insight_rows = v_cur.fetchall()
-        self.assertEqual(len(insight_rows), 1)
-        ins_id = insight_rows[0][0]
+        self.assertEqual(len(insight_rows), 2)
+
+        ins_0_id = insight_rows[0][0]
         self.assertEqual(insight_rows[0][1], "የሎጂስቲክስ ስራ እና የመንገድ ላይ ብክነት")
         self.assertEqual(insight_rows[0][2], "Operations")
         self.assertEqual(insight_rows[0][3], "candidate")
 
-        # 7. Candidate quotations: strictly 'candidate' review_status and anchor segment
+        ins_1_id = insight_rows[1][0]
+        self.assertEqual(insight_rows[1][1], "የካፒታል አጠቃቀም እና የጭነት መኪና ኪራይ")
+        self.assertEqual(insight_rows[1][2], "Finance & Capital")
+        self.assertEqual(insight_rows[1][3], "candidate")
+
+        # 7. Candidate quotations: strictly 'candidate' review_status and anchor segments
         v_cur.execute(
-            "SELECT id, segment_id, amharic_quote, timestamp_seconds, review_status FROM quotations WHERE episode_id = %s;",
+            "SELECT id, segment_id, amharic_quote, timestamp_seconds, review_status FROM quotations WHERE episode_id = %s ORDER BY display_order ASC;",
             (episode_id,),
         )
         quote_rows = v_cur.fetchall()
-        self.assertEqual(len(quote_rows), 1)
-        quote_id = quote_rows[0][0]
-        anchor_seg_id = quote_rows[0][1]
-        self.assertEqual(quote_rows[0][4], "candidate")
-        self.assertEqual(quote_rows[0][3], 14)
+        self.assertEqual(len(quote_rows), 2)
 
-        # Verify anchor segment points to segment 1
+        quote_0_id = quote_rows[0][0]
+        anchor_0_id = quote_rows[0][1]
+        self.assertEqual(quote_rows[0][3], 14)
+        self.assertEqual(quote_rows[0][4], "candidate")
+
+        quote_1_id = quote_rows[1][0]
+        anchor_1_id = quote_rows[1][1]
+        self.assertEqual(quote_rows[1][3], 58)
+        self.assertEqual(quote_rows[1][4], "candidate")
+
+        # Verify anchor segment 0 points to segment index 1
         v_cur.execute("SELECT id FROM transcript_segments WHERE episode_id = %s AND segment_index = 1;", (episode_id,))
         expected_seg_1_id = v_cur.fetchone()[0]
-        self.assertEqual(anchor_seg_id, expected_seg_1_id)
+        self.assertEqual(anchor_0_id, expected_seg_1_id)
 
-        # 8. Insight evidence foreign-key link to segment 1
+        # Verify anchor segment 1 points to segment index 3
+        v_cur.execute("SELECT id FROM transcript_segments WHERE episode_id = %s AND segment_index = 3;", (episode_id,))
+        expected_seg_3_id = v_cur.fetchone()[0]
+        self.assertEqual(anchor_1_id, expected_seg_3_id)
+
+        # 8. Insight evidence foreign-key links
         v_cur.execute(
             "SELECT segment_id FROM insight_evidence WHERE insight_id = %s;",
-            (ins_id,),
+            (ins_0_id,),
         )
-        ev_row = v_cur.fetchone()
-        self.assertIsNotNone(ev_row)
-        self.assertEqual(ev_row[0], expected_seg_1_id)
+        ev_0_row = v_cur.fetchone()
+        self.assertIsNotNone(ev_0_row)
+        self.assertEqual(ev_0_row[0], expected_seg_1_id)
 
-        # 9. Quotation segments relational provenance link to segment 1
+        v_cur.execute(
+            "SELECT segment_id FROM insight_evidence WHERE insight_id = %s;",
+            (ins_1_id,),
+        )
+        ev_1_row = v_cur.fetchone()
+        self.assertIsNotNone(ev_1_row)
+        self.assertEqual(ev_1_row[0], expected_seg_3_id)
+
+        # 9. Quotation segments relational provenance links
         v_cur.execute(
             "SELECT segment_id, sequence_order FROM quotation_segments WHERE quotation_id = %s;",
-            (quote_id,),
+            (quote_0_id,),
         )
-        qs_row = v_cur.fetchone()
-        self.assertIsNotNone(qs_row)
-        self.assertEqual(qs_row[0], expected_seg_1_id)
-        self.assertEqual(qs_row[1], 0)
+        qs_0_row = v_cur.fetchone()
+        self.assertIsNotNone(qs_0_row)
+        self.assertEqual(qs_0_row[0], expected_seg_1_id)
+        self.assertEqual(qs_0_row[1], 0)
+
+        v_cur.execute(
+            "SELECT segment_id, sequence_order FROM quotation_segments WHERE quotation_id = %s;",
+            (quote_1_id,),
+        )
+        qs_1_row = v_cur.fetchone()
+        self.assertIsNotNone(qs_1_row)
+        self.assertEqual(qs_1_row[0], expected_seg_3_id)
+        self.assertEqual(qs_1_row[1], 0)
 
         # 10. Isolation check: no writes to unrelated episode or job
         v_cur.execute(
@@ -706,23 +784,23 @@ class TestLocalIngestionIntegration(unittest.TestCase):
     def test_02_rejection_missing_or_whitespace_confirmation(self) -> None:
         """
         Asserts that missing or whitespace-only operator confirmation is rejected
-        before transcript processing and before Gemini mock transport is invoked.
+        before transcript processing and before fake extraction is invoked.
         """
         conn_factory = self._get_connection_factory()
         guest_id = str(uuid.uuid4())
         episode_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
-        video_id = "sample102"
+        video_id = "synth_ep102"
 
         seed_conn = conn_factory()
         cur = seed_conn.cursor()
         cur.execute(
             "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
-            (guest_id, f"guest-{guest_id[:8]}", "Name", "Title", "Co", "Bio", "Ind"),
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Name", "Title", "Co", "Bio", "Ind"),
         )
         cur.execute(
             "INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id) VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);",
-            (episode_id, 903, "Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+            (episode_id, 903, "Synthetic Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
         )
         cur.execute(
             "INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage) VALUES (%s, %s, %s, %s, 'pending', 'submission');",
@@ -732,12 +810,16 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         cur.close()
         seed_conn.close()
 
-        gemini_client, mock_invocations = self._build_mock_gemini_client()
+        fake_extractor = self._build_fake_extractor()
         with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
             transcript_content = json.load(f)
 
         provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
-        worker = JobWorker(connection_factory=conn_factory, transcript_provider=provider, orchestrator=PipelineOrchestrator(gemini_client=gemini_client))
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
 
         # Test with whitespace-only confirmation
         res = worker.process_job(job_id, confirm_youtube_video_id="   ")
@@ -745,7 +827,7 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         self.assertEqual(res.status, "failed")
         self.assertEqual(res.stage, "submission")
         self.assertIn("cannot be empty or whitespace-only", res.error or "")
-        self.assertEqual(mock_invocations[0], 0, "Gemini transport was invoked despite empty confirmation!")
+        self.assertEqual(fake_extractor.call_count, 0, "Fake extractor was invoked despite empty confirmation!")
 
         # Verify DB failure status
         check_conn = conn_factory()
@@ -771,17 +853,17 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         guest_id = str(uuid.uuid4())
         episode_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
-        video_id = "sample103"
+        video_id = "synth_ep103"
 
         seed_conn = conn_factory()
         cur = seed_conn.cursor()
         cur.execute(
             "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
-            (guest_id, f"guest-{guest_id[:8]}", "Name", "Title", "Co", "Bio", "Ind"),
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Name", "Title", "Co", "Bio", "Ind"),
         )
         cur.execute(
             "INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id) VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);",
-            (episode_id, 904, "Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+            (episode_id, 904, "Synthetic Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
         )
         cur.execute(
             "INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage) VALUES (%s, %s, %s, %s, 'pending', 'submission');",
@@ -791,20 +873,24 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         cur.close()
         seed_conn.close()
 
-        gemini_client, mock_invocations = self._build_mock_gemini_client()
+        fake_extractor = self._build_fake_extractor()
         with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
             transcript_content = json.load(f)
 
         provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
-        worker = JobWorker(connection_factory=conn_factory, transcript_provider=provider, orchestrator=PipelineOrchestrator(gemini_client=gemini_client))
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
 
         # Test with mismatched confirmation
-        res = worker.process_job(job_id, confirm_youtube_video_id="MISMATCHED_ID")
+        res = worker.process_job(job_id, confirm_youtube_video_id="MISMATCHED1")
 
         self.assertEqual(res.status, "failed")
         self.assertEqual(res.stage, "submission")
         self.assertIn("does not match", res.error or "")
-        self.assertEqual(mock_invocations[0], 0, "Gemini transport was invoked despite video ID mismatch!")
+        self.assertEqual(fake_extractor.call_count, 0, "Fake extractor was invoked despite video ID mismatch!")
 
         # Verify DB failure status
         check_conn = conn_factory()
@@ -813,7 +899,7 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         j_row = c_cur.fetchone()
         self.assertEqual(j_row[0], "failed")
         self.assertEqual(j_row[1], "submission")
-        self.assertIn("MISMATCHED_ID", j_row[2])
+        self.assertIn("MISMATCHED1", j_row[2])
 
         c_cur.close()
         check_conn.close()
@@ -828,17 +914,17 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         episode_id = str(uuid.uuid4())
         job_id_1 = str(uuid.uuid4())
         job_id_2 = str(uuid.uuid4())
-        video_id = "sample104"
+        video_id = "synth_ep104"
 
         seed_conn = conn_factory()
         cur = seed_conn.cursor()
         cur.execute(
             "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
-            (guest_id, f"guest-{guest_id[:8]}", "Name", "Title", "Co", "Bio", "Ind"),
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Name", "Title", "Co", "Bio", "Ind"),
         )
         cur.execute(
             "INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id) VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);",
-            (episode_id, 905, "Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+            (episode_id, 905, "Synthetic Title", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
         )
         cur.execute(
             "INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage) VALUES (%s, %s, %s, %s, 'pending', 'submission');",
@@ -848,22 +934,26 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         cur.close()
         seed_conn.close()
 
-        gemini_client, mock_invocations = self._build_mock_gemini_client()
+        fake_extractor = self._build_fake_extractor()
         with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
             transcript_content = json.load(f)
 
         provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
-        worker = JobWorker(connection_factory=conn_factory, transcript_provider=provider, orchestrator=PipelineOrchestrator(gemini_client=gemini_client))
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
 
         # First run succeeds
         res1 = worker.process_job(job_id_1, confirm_youtube_video_id=video_id)
         self.assertEqual(res1.status, "completed")
-        self.assertEqual(mock_invocations[0], 1)
+        self.assertEqual(fake_extractor.call_count, 1)
 
         # Reviewer approves candidate insight via database RPC
         review_conn = conn_factory()
         r_cur = review_conn.cursor()
-        r_cur.execute("SELECT id FROM insights WHERE episode_id = %s;", (episode_id,))
+        r_cur.execute("SELECT id FROM insights WHERE episode_id = %s ORDER BY display_order ASC;", (episode_id,))
         cand_ins_id = r_cur.fetchone()[0]
 
         # Execute review RPC
@@ -897,8 +987,8 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         self.assertEqual(res2.status, "failed")
         self.assertEqual(res2.stage, "human_review")
         self.assertIn("verified/reviewed", res2.error or "")
-        # Gemini transport was NOT invoked on the second attempt
-        self.assertEqual(mock_invocations[0], 1, "Gemini transport was called despite editorial review protection!")
+        # Fake extractor was NOT invoked on the second attempt
+        self.assertEqual(fake_extractor.call_count, 1, "Fake extractor was called despite editorial review protection!")
 
         # Verify pre-existing verified insight is strictly preserved
         check_conn = conn_factory()
@@ -916,20 +1006,20 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         guest_id = str(uuid.uuid4())
         episode_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
-        video_id = "sample105"
+        video_id = "synth_ep105"
 
         seed_conn = conn_factory()
         cur = seed_conn.cursor()
         cur.execute(
             "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
-            (guest_id, f"guest-{guest_id[:8]}", "Name", "Title", "Co", "Bio", "Ind"),
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Name", "Title", "Co", "Bio", "Ind"),
         )
         cur.execute(
             """
             INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, published_at, youtube_url, youtube_video_id)
             VALUES (%s, %s, %s, %s, %s, %s, 'published', now(), %s, %s);
             """,
-            (episode_id, 906, "Published Episode", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+            (episode_id, 906, "Published Synthetic Episode", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
         )
         cur.execute(
             "INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage) VALUES (%s, %s, %s, %s, 'pending', 'submission');",
@@ -939,19 +1029,23 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         cur.close()
         seed_conn.close()
 
-        gemini_client, mock_invocations = self._build_mock_gemini_client()
+        fake_extractor = self._build_fake_extractor()
         with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
             transcript_content = json.load(f)
 
         provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
-        worker = JobWorker(connection_factory=conn_factory, transcript_provider=provider, orchestrator=PipelineOrchestrator(gemini_client=gemini_client))
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
 
         res = worker.process_job(job_id, confirm_youtube_video_id=video_id)
 
         self.assertEqual(res.status, "failed")
         self.assertEqual(res.stage, "human_review")
         self.assertIn("already published", res.error or "")
-        self.assertEqual(mock_invocations[0], 0, "Gemini transport was called for published episode!")
+        self.assertEqual(fake_extractor.call_count, 0, "Fake extractor was called for published episode!")
 
         # Verify episode publication status remains untouched
         check_conn = conn_factory()
@@ -961,7 +1055,307 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         c_cur.close()
         check_conn.close()
 
-    def test_06_disposable_database_cleanup_isolation(self) -> None:
+    def test_06_atomic_rollback_on_mid_persistence_failure(self) -> None:
+        """
+        Phase E Scenario A: Atomic Rollback on Mid-Persistence Failure.
+        Induces a controlled database exception after persistence has begun
+        (during quotations insertion, after segments, chunks, extraction runs,
+        and insights have already been written in the transaction).
+        Asserts that:
+        1. The persistence transaction rolls back all in-progress writes.
+        2. Zero orphaned segments, chunks, extraction_runs, insights, quotations, or evidence remain.
+        3. The processing_jobs failure record is committed in a separate transaction.
+        """
+        failing_conn_factory = self._get_failing_connection_factory(
+            fail_on_query_substring="INSERT INTO quotations",
+        )
+
+        guest_id = str(uuid.uuid4())
+        episode_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())
+        video_id = "synth_ep106"
+
+        seed_conn = self._get_connection_factory()()
+        cur = seed_conn.cursor()
+        cur.execute(
+            "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Rollback Guest", "Title", "Co", "Bio", "Logistics"),
+        )
+        cur.execute(
+            """
+            INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id)
+            VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);
+            """,
+            (episode_id, 907, "Synthetic Rollback Episode", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
+            VALUES (%s, %s, %s, %s, 'pending', 'submission');
+            """,
+            (job_id, episode_id, f"https://youtu.be/{video_id}", video_id),
+        )
+        seed_conn.commit()
+        cur.close()
+        seed_conn.close()
+
+        fake_extractor = self._build_fake_extractor()
+        with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+            transcript_content = json.load(f)
+
+        provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
+        worker = JobWorker(
+            connection_factory=failing_conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
+
+        # Execute worker: will encounter simulated failure during quotation insert
+        result = worker.process_job(job_id, confirm_youtube_video_id=video_id)
+
+        # Worker captures failure and updates job status to failed
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.stage, "human_review")
+        self.assertIn("Simulated mid-persistence database failure", result.error or "")
+
+        # ---------------------------------------------------------------------
+        # Comprehensive Database Zero-Orphan Rollback Assertions
+        # ---------------------------------------------------------------------
+        verify_conn = self._get_connection_factory()()
+        v_cur = verify_conn.cursor()
+
+        # 1. Zero transcript segments persisted
+        v_cur.execute("SELECT count(*) FROM transcript_segments WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 0, "Orphaned transcript_segments found after rollback!")
+
+        # 2. Zero transcript chunks persisted
+        v_cur.execute("SELECT count(*) FROM transcript_chunks WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 0, "Orphaned transcript_chunks found after rollback!")
+
+        # 3. Zero extraction runs persisted
+        v_cur.execute("SELECT count(*) FROM extraction_runs WHERE job_id = %s;", (job_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 0, "Orphaned extraction_runs found after rollback!")
+
+        # 4. Zero insights persisted
+        v_cur.execute("SELECT count(*) FROM insights WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 0, "Orphaned insights found after rollback!")
+
+        # 5. Zero quotations persisted
+        v_cur.execute("SELECT count(*) FROM quotations WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 0, "Orphaned quotations found after rollback!")
+
+        # 6. Processing job status is recorded as failed with error summary in separate transaction
+        v_cur.execute("SELECT status, current_stage, error_summary FROM processing_jobs WHERE id = %s;", (job_id,))
+        job_row = v_cur.fetchone()
+        self.assertIsNotNone(job_row)
+        self.assertEqual(job_row[0], "failed")
+        self.assertEqual(job_row[1], "human_review")
+        self.assertIn("Simulated mid-persistence database failure", job_row[2])
+
+        # 7. Episode remains draft
+        v_cur.execute("SELECT publication_status FROM episodes WHERE id = %s;", (episode_id,))
+        self.assertEqual(v_cur.fetchone()[0], "draft")
+
+        v_cur.close()
+        verify_conn.close()
+
+    def test_07_candidate_collision_and_authorized_rerun_lifecycle(self) -> None:
+        """
+        Phase E Scenario D: Candidate Collision and Rerun Behavior.
+        1. Run 1 succeeds, persisting unreviewed candidates.
+        2. Run 2 on the same episode with allow_candidate_rerun=False is strictly BLOCKED
+           with EditorialProtectionError before AI extraction. Pre-existing candidates intact.
+        3. Run 3 with allow_candidate_rerun=True succeeds: unreviewed candidates and prior runs
+           are cleaned up in foreign-key-safe order, fresh candidates are persisted, and job completes.
+        """
+        conn_factory = self._get_connection_factory()
+        guest_id = str(uuid.uuid4())
+        episode_id = str(uuid.uuid4())
+        job_id_1 = str(uuid.uuid4())
+        job_id_2 = str(uuid.uuid4())
+        job_id_3 = str(uuid.uuid4())
+        video_id = "synth_ep107"
+
+        seed_conn = conn_factory()
+        cur = seed_conn.cursor()
+        cur.execute(
+            "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Rerun Guest", "Title", "Co", "Bio", "Logistics"),
+        )
+        cur.execute(
+            """
+            INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id)
+            VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);
+            """,
+            (episode_id, 908, "Synthetic Rerun Episode", "Summary", guest_id, 30, f"https://youtu.be/{video_id}", video_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
+            VALUES (%s, %s, %s, %s, 'pending', 'submission');
+            """,
+            (job_id_1, episode_id, f"https://youtu.be/{video_id}", video_id),
+        )
+        seed_conn.commit()
+        cur.close()
+        seed_conn.close()
+
+        fake_extractor = self._build_fake_extractor()
+        with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+            transcript_content = json.load(f)
+
+        provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
+
+        # Step 1: Initial ingestion run succeeds
+        res1 = worker.process_job(job_id_1, confirm_youtube_video_id=video_id)
+        self.assertEqual(res1.status, "completed")
+        self.assertEqual(fake_extractor.call_count, 1)
+
+        # Verify initial candidates exist
+        verify_conn = conn_factory()
+        v_cur = verify_conn.cursor()
+        v_cur.execute("SELECT count(*) FROM insights WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(v_cur.fetchone()[0]), 2)
+        v_cur.close()
+        verify_conn.close()
+
+        # Step 2: Seed second job and attempt rerun with allow_candidate_rerun=False
+        seed_conn2 = conn_factory()
+        cur2 = seed_conn2.cursor()
+        cur2.execute(
+            """
+            INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
+            VALUES (%s, %s, %s, %s, 'pending', 'submission');
+            """,
+            (job_id_2, episode_id, f"https://youtu.be/{video_id}", video_id),
+        )
+        seed_conn2.commit()
+        cur2.close()
+        seed_conn2.close()
+
+        res2 = worker.process_job(job_id_2, allow_candidate_rerun=False, confirm_youtube_video_id=video_id)
+
+        # Assert rejection: cannot rerun without allow_candidate_rerun=True
+        self.assertEqual(res2.status, "failed")
+        self.assertEqual(res2.stage, "human_review")
+        self.assertIn("already contains persisted pipeline data", res2.error or "")
+        self.assertIn("allow_candidate_rerun", res2.error or "")
+        # Extractor was NOT called on unauthorized rerun attempt
+        self.assertEqual(fake_extractor.call_count, 1)
+
+        # Step 3: Seed third job and execute rerun with allow_candidate_rerun=True
+        seed_conn3 = conn_factory()
+        cur3 = seed_conn3.cursor()
+        cur3.execute(
+            """
+            INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
+            VALUES (%s, %s, %s, %s, 'pending', 'submission');
+            """,
+            (job_id_3, episode_id, f"https://youtu.be/{video_id}", video_id),
+        )
+        seed_conn3.commit()
+        cur3.close()
+        seed_conn3.close()
+
+        res3 = worker.process_job(job_id_3, allow_candidate_rerun=True, confirm_youtube_video_id=video_id)
+
+        # Assert success: prior unreviewed candidates were cleanly replaced
+        self.assertEqual(res3.status, "completed")
+        self.assertEqual(res3.stage, "human_review")
+        self.assertEqual(fake_extractor.call_count, 2)
+
+        # Verify fresh candidate counts and clean replacement
+        check_conn = conn_factory()
+        c_cur = check_conn.cursor()
+        c_cur.execute("SELECT count(*) FROM insights WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(c_cur.fetchone()[0]), 2)
+
+        c_cur.execute("SELECT count(*) FROM quotations WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(c_cur.fetchone()[0]), 2)
+
+        c_cur.execute("SELECT run_number FROM extraction_runs WHERE job_id = %s;", (job_id_3,))
+        run_row = c_cur.fetchone()
+        self.assertIsNotNone(run_row)
+        self.assertEqual(run_row[0], 1)
+
+        c_cur.close()
+        check_conn.close()
+
+    def test_08_job_episode_video_id_mismatch(self) -> None:
+        """
+        Phase E Scenario E: Identity Mismatch Safety.
+        Verifies that when a processing job's YouTube video ID does not match
+        the parent episode's registered YouTube video ID, preflight fails closed
+        before AI extraction and candidate persistence.
+        """
+        conn_factory = self._get_connection_factory()
+        guest_id = str(uuid.uuid4())
+        episode_id = str(uuid.uuid4())
+        job_id = str(uuid.uuid4())
+        ep_video_id = "synth_ep108"
+        job_video_id = "synth_ep109"
+
+        seed_conn = conn_factory()
+        cur = seed_conn.cursor()
+        cur.execute(
+            "INSERT INTO guests (id, slug, name, title, company, bio, industry) VALUES (%s, %s, %s, %s, %s, %s, %s);",
+            (guest_id, f"guest-{guest_id[:8]}", "Synthetic Mismatch Guest", "Title", "Co", "Bio", "Logistics"),
+        )
+        cur.execute(
+            """
+            INSERT INTO episodes (id, episode_number, title, summary, guest_id, duration_minutes, publication_status, youtube_url, youtube_video_id)
+            VALUES (%s, %s, %s, %s, %s, %s, 'draft', %s, %s);
+            """,
+            (episode_id, 909, "Synthetic Mismatch Episode", "Summary", guest_id, 30, f"https://youtu.be/{ep_video_id}", ep_video_id),
+        )
+        cur.execute(
+            """
+            INSERT INTO processing_jobs (id, episode_id, youtube_url, youtube_video_id, status, current_stage)
+            VALUES (%s, %s, %s, %s, 'pending', 'submission');
+            """,
+            (job_id, episode_id, f"https://youtu.be/{job_video_id}", job_video_id),
+        )
+        seed_conn.commit()
+        cur.close()
+        seed_conn.close()
+
+        fake_extractor = self._build_fake_extractor()
+        with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+            transcript_content = json.load(f)
+
+        provider = StaticTranscriptProvider(default_content=transcript_content, requires_confirmation=True)
+        worker = JobWorker(
+            connection_factory=conn_factory,
+            transcript_provider=provider,
+            orchestrator=PipelineOrchestrator(gemini_client=fake_extractor.create_gemini_client()),
+        )
+
+        # Operator confirms job's video ID, but job video ID mismatches episode's video ID
+        res = worker.process_job(job_id, confirm_youtube_video_id=job_video_id)
+
+        self.assertEqual(res.status, "failed")
+        self.assertEqual(res.stage, "submission")
+        self.assertIn("does not match episode YouTube video ID", res.error or "")
+        self.assertEqual(fake_extractor.call_count, 0, "Fake extractor called despite job/episode identity mismatch!")
+
+        # Confirm no segments or candidates were persisted
+        check_conn = conn_factory()
+        c_cur = check_conn.cursor()
+        c_cur.execute("SELECT count(*) FROM transcript_segments WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(c_cur.fetchone()[0]), 0)
+
+        c_cur.execute("SELECT count(*) FROM insights WHERE episode_id = %s;", (episode_id,))
+        self.assertEqual(int(c_cur.fetchone()[0]), 0)
+
+        c_cur.close()
+        check_conn.close()
+
+    def test_09_disposable_database_cleanup_isolation(self) -> None:
         """
         Verifies that cleanup drops only the disposable test database and
         leaves all other pre-existing databases untouched.
@@ -1016,7 +1410,7 @@ class TestLocalIngestionIntegration(unittest.TestCase):
         )
         self.assertEqual(chk_default.stdout.strip(), "1")
 
-    def test_07_adapter_transaction_rollback_and_type_preservation(self) -> None:
+    def test_10_adapter_transaction_rollback_and_type_preservation(self) -> None:
         """
         Adapter regression test verifying LocalPsqlConnection and LocalPsqlCursor:
         1. Manual-commit transaction rollback leaves uncommitted writes discarded.

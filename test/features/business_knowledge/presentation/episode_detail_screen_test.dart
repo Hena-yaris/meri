@@ -6,10 +6,48 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:meri/features/bookmarks/data/providers.dart';
+import 'package:meri/features/bookmarks/domain/repositories/bookmarks_repository.dart';
 import 'package:meri/features/business_knowledge/data/datasources/local_json_data_source.dart';
 import 'package:meri/features/business_knowledge/data/providers.dart';
 import 'package:meri/features/business_knowledge/domain/models/episode.dart';
 import 'package:meri/features/business_knowledge/presentation/screens/episode_detail_screen.dart';
+
+class FakeBookmarksRepository implements BookmarksRepository {
+  FakeBookmarksRepository([Set<String>? initial])
+      : _bookmarkedIds = initial != null ? Set.from(initial) : {};
+
+  final Set<String> _bookmarkedIds;
+
+  @override
+  Future<Set<String>> getBookmarkedEpisodeIds() async => Set.from(_bookmarkedIds);
+
+  @override
+  Future<void> addBookmark(String episodeId) async {
+    _bookmarkedIds.add(episodeId);
+  }
+
+  @override
+  Future<void> removeBookmark(String episodeId) async {
+    _bookmarkedIds.remove(episodeId);
+  }
+
+  @override
+  Future<bool> toggleBookmark(String episodeId) async {
+    if (_bookmarkedIds.contains(episodeId)) {
+      _bookmarkedIds.remove(episodeId);
+      return false;
+    } else {
+      _bookmarkedIds.add(episodeId);
+      return true;
+    }
+  }
+
+  @override
+  Future<bool> isBookmarked(String episodeId) async {
+    return _bookmarkedIds.contains(episodeId);
+  }
+}
 
 void main() {
   setUpAll(() {
@@ -113,6 +151,102 @@ void main() {
             "speaker": "Samrawit Kebede",
             "timestampSeconds": 980,
             "context": ""
+          }
+        ]
+      }
+    ]
+  }
+  ''';
+
+  const testOptionalAndLongJson = '''
+  {
+    "episodes": [
+      {
+        "id": "ep-missing-fields",
+        "title": "Minimal Guest Record",
+        "podcastTitle": "Meri Business Series",
+        "episodeNumber": 105,
+        "durationMinutes": 45,
+        "publishedAt": "2026-10-20T08:00:00.000Z",
+        "summary": "Testing minimal fields.",
+        "isFeatured": false,
+        "tags": [],
+        "youtubeUrl": null,
+        "guest": {
+          "id": "g-105",
+          "name": "Almaz Bekele",
+          "title": "",
+          "company": "Bekele Textiles",
+          "bio": "",
+          "industry": null,
+          "avatarUrl": null
+        },
+        "insights": [
+          {
+            "id": "ins-105-1",
+            "episodeId": "ep-missing-fields",
+            "title": "Cash Flow First",
+            "category": "Finance",
+            "summary": "Keep reserves.",
+            "takeaways": [],
+            "practicalAction": null
+          }
+        ],
+        "quotations": [
+          {
+            "id": "quote-105-1",
+            "episodeId": "ep-missing-fields",
+            "amharicQuote": "ጥሬ ገንዘብ የንግድ ደም ነው።",
+            "englishTranslation": "",
+            "speaker": "Almaz Bekele",
+            "timestampSeconds": 300,
+            "context": ""
+          }
+        ]
+      },
+      {
+        "id": "ep-long-text",
+        "title": "Extremely Long Episode Title That Tests Text Wrapping Across Multiple Editorial Lines Without Causing Any RenderFlex Horizontal Overflows In Restrained Mobile Viewports",
+        "podcastTitle": "Meri Extended Business Series",
+        "episodeNumber": 106,
+        "durationMinutes": 120,
+        "publishedAt": "2026-10-22T08:00:00.000Z",
+        "summary": "A comprehensive deep dive into enterprise operational resilience, market expansion strategies, and institutional governance structures designed to rigorously evaluate how long paragraphs wrap across screens.",
+        "isFeatured": false,
+        "tags": ["Enterprise", "Operations", "Governance", "Resilience"],
+        "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep106",
+        "guest": {
+          "id": "g-106",
+          "name": "Dr. Hailemariam Wolde-Yesus Senior Executive Director",
+          "title": "Chief Executive Officer & Chairman of the Board of Strategic Initiatives",
+          "company": "Pan-African Multilateral Industrial Development Group of Companies",
+          "bio": "Senior industrial economist with three decades of experience consulting on continental manufacturing corridors and supply chain resilience.",
+          "industry": "Industrial Manufacturing & Infrastructure",
+          "avatarUrl": null
+        },
+        "insights": [
+          {
+            "id": "ins-106-1",
+            "episodeId": "ep-long-text",
+            "title": "Institutional Governance Over Personality-Driven Leadership In Long-Term Enterprise Building",
+            "category": "Governance",
+            "summary": "Building durable enterprises requires establishing formal decision-making councils rather than concentrating executive authority in a single visionary founder.",
+            "takeaways": [
+              "Create independent board committees with veto power over capital expenditures exceeding threshold allocations.",
+              "Formalize succession pathways early to ensure organizational stability through macroeconomic shocks."
+            ],
+            "practicalAction": "Draft a multi-year executive succession framework and review key-person operational risk with executive leadership."
+          }
+        ],
+        "quotations": [
+          {
+            "id": "quote-106-1",
+            "episodeId": "ep-long-text",
+            "amharicQuote": "ተቋማዊ አሰራር የሌለው ንግድ የአንድ ሰው ህይወት ሲያበቃ አብሮ የሚያበቃ ጊዜያዊ ክስተት ብቻ ነው የሚሆነው።",
+            "englishTranslation": "A business without institutional systems is merely a temporary phenomenon that ceases to exist when its single founder departs.",
+            "speaker": "Dr. Hailemariam Wolde-Yesus",
+            "timestampSeconds": 4820,
+            "context": "Elaborating on enterprise longevity and structural durability during keynote briefing."
           }
         ]
       }
@@ -294,7 +428,170 @@ void main() {
       expect(find.text('Unable to Load Records'), findsOneWidget);
       expect(find.text('Retry'), findsOneWidget);
     });
+
+    testWidgets('handles missing optional guest fields gracefully without empty delimiters or errors', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final dataSource = LocalJsonDataSource(
+        loader: (path) async => testOptionalAndLongJson,
+      );
+
+      await tester.pumpWidget(buildDetailWidget(
+        episodeId: 'ep-missing-fields',
+        customDataSource: dataSource,
+      ));
+      await tester.pumpAndSettle();
+
+      // Guest name and company rendered
+      expect(find.text('Almaz Bekele'), findsWidgets);
+      expect(find.text('Bekele Textiles'), findsOneWidget);
+      // Empty title should not cause dangling bullet prefix
+      expect(find.text(' • Bekele Textiles'), findsNothing);
+
+      // Insight rendered without practical action callout
+      expect(find.text('Cash Flow First'), findsOneWidget);
+      expect(find.text('PRACTICAL ACTION'), findsNothing);
+
+      // Amharic quote rendered upright without fabricated translation
+      expect(find.text('“ጥሬ ገንዘብ የንግድ ደም ነው።”'), findsOneWidget);
+      expect(find.text('English translation'), findsNothing);
+    });
+
+    testWidgets('preserves exact insight order with ordinal markers', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(buildDetailWidget(episodeId: 'ep-101'));
+      await tester.pumpAndSettle();
+
+      // Ordinal markers rendered
+      expect(find.text('INSIGHT 01'), findsOneWidget);
+      expect(find.text('INSIGHT 02'), findsOneWidget);
+
+      // First insight appears before second insight vertically
+      final top1 = tester.getTopLeft(find.text('Telemetry Over Fleet Size')).dy;
+      final top2 = tester.getTopLeft(find.text('High Altitude Cooling')).dy;
+      expect(top1, lessThan(top2));
+    });
+
+    testWidgets('bookmark control maintains at least 48x48 hit target and toggles reactively', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final repository = FakeBookmarksRepository({});
+
+      await tester.pumpWidget(buildDetailWidget(
+        episodeId: 'ep-101',
+        additionalOverrides: [
+          bookmarksRepositoryProvider.overrideWithValue(repository),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      // Bookmark action has hit target >= 48x48
+      final bookmarkAction = find.byTooltip('Bookmark episode');
+      expect(bookmarkAction, findsOneWidget);
+      final size = tester.getSize(bookmarkAction);
+      expect(size.width, greaterThanOrEqualTo(48.0));
+      expect(size.height, greaterThanOrEqualTo(48.0));
+
+      // Tap to bookmark
+      await tester.tap(bookmarkAction);
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Remove bookmark'), findsOneWidget);
+      expect(repository.isBookmarked('ep-101'), completion(isTrue));
+
+      // Tap to unbookmark
+      await tester.tap(find.byTooltip('Remove bookmark'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Bookmark episode'), findsOneWidget);
+      expect(repository.isBookmarked('ep-101'), completion(isFalse));
+    });
+
+    testWidgets('remains usable and overflow-free under 1.5x accessibility text scale', (tester) async {
+      tester.view.physicalSize = const Size(400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final router = GoRouter(
+        initialLocation: '/episode/ep-101',
+        routes: [
+          GoRoute(
+            path: '/episode/:id',
+            builder: (context, state) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: const TextScaler.linear(1.5),
+              ),
+              child: EpisodeDetailScreen(
+                episodeId: state.pathParameters['id']!,
+              ),
+            ),
+          ),
+        ],
+      );
+
+      final dataSource = LocalJsonDataSource(
+        loader: (path) async => testFullJson,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            localJsonDataSourceProvider.overrideWithValue(dataSource),
+          ],
+          child: MaterialApp.router(
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scaling Cold Chain Logistics'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('handles representative long text without horizontal overflow on narrow screen', (tester) async {
+      tester.view.physicalSize = const Size(360, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final dataSource = LocalJsonDataSource(
+        loader: (path) async => testOptionalAndLongJson,
+      );
+
+      await tester.pumpWidget(buildDetailWidget(
+        episodeId: 'ep-long-text',
+        customDataSource: dataSource,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Extremely Long Episode Title'), findsOneWidget);
+      expect(find.textContaining('Dr. Hailemariam Wolde-Yesus'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
   });
+
 
   group('Navigation from EpisodeCard to EpisodeDetailScreen', () {
     testWidgets('Tapping episode card in Explore navigates to EpisodeDetailScreen', (tester) async {

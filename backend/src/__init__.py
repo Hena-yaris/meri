@@ -60,6 +60,11 @@ from .gemini_client import (
     verify_model_configuration,
     verify_model_preflight,
 )
+from .caption_reconstructor import (
+    CaptionDiagnostics,
+    RollingCaptionReconstructor,
+    diagnose_caption_stream,
+)
 from .models import (
     InvalidTimestampError,
     InvalidYouTubeUrlError,
@@ -67,6 +72,7 @@ from .models import (
     NormalizedSegment,
     OverlapPolicy,
     RawCue,
+    ReconstructedSpeechSpan,
     TranscriptAcquisitionMethod,
     TranscriptChunk,
     TranscriptOverlapError,

@@ -22,9 +22,12 @@ class InsightPreviewStrip extends StatelessWidget {
     if (insights.isEmpty) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.8);
+    final stripHeight = (196.0 * textScale).clamp(196.0, 270.0);
+    final cardWidth = (280.0 * (1.0 + (textScale - 1.0) * 0.35)).clamp(280.0, 360.0);
 
     return SizedBox(
-      height: 180,
+      height: stripHeight,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         scrollDirection: Axis.horizontal,
@@ -38,7 +41,7 @@ class InsightPreviewStrip extends StatelessWidget {
               onTap: onInsightTap != null ? () => onInsightTap!(insight) : null,
               borderRadius: AppRadius.cardRadius,
               child: Container(
-                width: 280,
+                width: cardWidth,
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.darkSurface : AppColors.paperLight,
                   borderRadius: AppRadius.cardRadius,
@@ -56,40 +59,37 @@ class InsightPreviewStrip extends StatelessWidget {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        EditorialBadge(
-                          label: insight.category,
-                          variant: EditorialBadgeVariant.orange,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          insight.title,
-                          style: AppTypography.titleMedium(
-                            color: isDark
-                                ? AppColors.darkTextPrimary
-                                : AppColors.inkBlack,
-                          ).copyWith(fontSize: 14),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          insight.summary,
-                          style: AppTypography.bodySmall(
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.stoneGray,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                    EditorialBadge(
+                      label: insight.category,
+                      variant: EditorialBadgeVariant.orange,
                     ),
-                    if (insight.practicalAction != null)
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      insight.title,
+                      style: AppTypography.titleMedium(
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.inkBlack,
+                      ).copyWith(fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Expanded(
+                      child: Text(
+                        insight.summary,
+                        style: AppTypography.bodySmall(
+                          color: isDark
+                              ? AppColors.darkTextSecondary
+                              : AppColors.stoneGray,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (insight.practicalAction != null) ...[
+                      const SizedBox(height: AppSpacing.xs),
                       Row(
                         children: [
                           Icon(
@@ -110,6 +110,7 @@ class InsightPreviewStrip extends StatelessWidget {
                           ),
                         ],
                       ),
+                    ],
                   ],
                 ),
               ),

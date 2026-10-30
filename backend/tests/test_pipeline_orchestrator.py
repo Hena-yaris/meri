@@ -405,13 +405,21 @@ class MockDbConnection:
 
 def create_sample_gemini_response_payload(
     evidence_segment_indices: List[int] = [1],
-    source_segment_index: int = 1,
+    source_segment_indices: Optional[List[int]] = None,
+    source_segment_index: Optional[int] = None,
     amharic_quote: str = "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
     quote_timestamp: int = 14,
     insight_title: str = "የሎጂስቲክስ ስራ እና የመንገድ ላይ ብክነት",
     insight_category: str = "Operations",
 ) -> Dict[str, Any]:
     """Builds a valid candidate extraction response payload matching fixture segments."""
+    if source_segment_indices is not None:
+        seg_indices = source_segment_indices
+    elif source_segment_index is not None:
+        seg_indices = [source_segment_index]
+    else:
+        seg_indices = [1]
+
     return {
         "schema_version": "1.0.0",
         "episode_summary": {
@@ -454,7 +462,7 @@ def create_sample_gemini_response_payload(
                 "amharic_quote": amharic_quote,
                 "english_translation": "The greatest test in logistics isn't buying trucks; it's calculating the value of wasted produce.",
                 "speaker": "Dawit Tadesse",
-                "source_segment_index": source_segment_index,
+                "source_segment_indices": seg_indices,
                 "timestamp_seconds": quote_timestamp,
                 "context": "ስለ ሎጂስቲክስ ስራ ፈተናዎች ሲያብራራ የተናገረው።",
                 "importance_rationale": "የንግዱን ዋና ፍልስፍና ያሳያል።",

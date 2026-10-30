@@ -204,10 +204,36 @@ class SemanticEvidenceValidator:
 
             # Resolve source segment indices
             indices: List[int] = []
-            if "source_segment_indices" in q_raw and isinstance(q_raw["source_segment_indices"], list):
-                indices = [int(i) for i in q_raw["source_segment_indices"] if isinstance(i, (int, float))]
-            elif "source_segment_index" in q_raw and isinstance(q_raw["source_segment_index"], (int, float)):
-                indices = [int(q_raw["source_segment_index"])]
+            has_invalid_index = False
+            raw_indices = q_raw.get("source_segment_indices")
+
+            if raw_indices is not None:
+                if isinstance(raw_indices, list):
+                    for elem in raw_indices:
+                        if isinstance(elem, bool) or not isinstance(elem, int) or elem < 0:
+                            has_invalid_index = True
+                        else:
+                            indices.append(elem)
+                else:
+                    has_invalid_index = True
+            elif "source_segment_index" in q_raw:
+                raw_single = q_raw.get("source_segment_index")
+                if isinstance(raw_single, bool) or not isinstance(raw_single, int) or raw_single < 0:
+                    has_invalid_index = True
+                else:
+                    indices.append(raw_single)
+
+            if has_invalid_index:
+                quote_has_error = True
+                errors.append(
+                    ValidationErrorItem(
+                        item_type="quotation",
+                        item_index=q_idx,
+                        field="source_segment_indices",
+                        error_code=ValidationErrorCode.SEGMENT_NOT_FOUND,
+                        message=f"Quotation {q_idx} contains invalid, negative, or non-integer source segment index references.",
+                    )
+                )
 
             if not indices:
                 quote_has_error = True
@@ -241,21 +267,13 @@ class SemanticEvidenceValidator:
                     canonical_start_ms = 0
                     canonical_seconds = 0
                 else:
-                    # Record relational provenance segments with deterministic sequence ordering
-                    for seq_order, seg_idx in enumerate(indices):
-                        quotation_segments.append(
-                            CandidateQuotationSegment(
-                                quotation_index=q_idx,
-                                segment_index=seg_idx,
-                                sequence_order=seq_order,
-                            )
-                        )
-
-                    # Check cross-segment contiguity
+                    # Check cross-segment contiguity, duplicates, and chronological ordering
                     if len(indices) > 1:
+                        has_duplicates = len(indices) != len(set(indices))
                         sorted_indices = sorted(indices)
                         is_contiguous = (
-                            indices == sorted_indices
+                            not has_duplicates
+                            and indices == sorted_indices
                             and all(sorted_indices[i] + 1 == sorted_indices[i + 1] for i in range(len(sorted_indices) - 1))
                         )
                         if not is_contiguous:
@@ -266,10 +284,20 @@ class SemanticEvidenceValidator:
                                     item_index=q_idx,
                                     field="source_segment_indices",
                                     error_code=ValidationErrorCode.NON_CONTIGUOUS_SEGMENTS,
-                                    message=f"Cross-segment quotation {q_idx} references non-contiguous segment indices {indices}. "
-                                            f"Cross-segment quotes must specify a strictly contiguous range.",
+                                    message=f"Cross-segment quotation {q_idx} references invalid, duplicated, reversed, or non-contiguous segment indices {indices}. "
+                                            f"Cross-segment quotes must specify a strictly contiguous range in chronological order.",
                                 )
                             )
+
+                    # Record relational provenance segments with deterministic sequence ordering
+                    for seq_order, seg_idx in enumerate(indices):
+                        quotation_segments.append(
+                            CandidateQuotationSegment(
+                                quotation_index=q_idx,
+                                segment_index=seg_idx,
+                                sequence_order=seq_order,
+                            )
+                        )
 
                     # Derive canonical timestamp from the first source segment's start_ms
                     first_seg = segments_by_idx[indices[0]]

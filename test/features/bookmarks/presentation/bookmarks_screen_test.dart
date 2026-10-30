@@ -139,7 +139,7 @@ void main() {
       await tester.pumpWidget(buildTestWidget(bookmarksRepository: repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('No Saved Episodes'), findsOneWidget);
+      expect(find.text('Your Knowledge Notebook is Empty'), findsOneWidget);
       expect(
         find.text(
           'Save insightful entrepreneur interviews and masterclasses to build your personal business knowledge notebook.',
@@ -171,7 +171,7 @@ void main() {
       expect(find.text('SAVED KNOWLEDGE ARCHIVE • 1 EPISODE'), findsOneWidget);
       expect(find.text('Scaling Cold Chain Logistics'), findsOneWidget);
       expect(find.textContaining('Dawit Tadesse'), findsOneWidget);
-      expect(find.text('No Saved Episodes'), findsNothing);
+      expect(find.text('Your Knowledge Notebook is Empty'), findsNothing);
     });
 
     testWidgets('tapping saved episode card opens its detail route', (tester) async {
@@ -206,7 +206,7 @@ void main() {
       expect(find.text('EPISODE #101'), findsNothing);
 
       // Screen should have reactively updated to empty state
-      expect(find.text('No Saved Episodes'), findsOneWidget);
+      expect(find.text('Your Knowledge Notebook is Empty'), findsOneWidget);
       expect(find.text('Scaling Cold Chain Logistics'), findsNothing);
     });
 

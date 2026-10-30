@@ -3,6 +3,7 @@ Meri Content Pipeline v1: Ingestion parser for JSON, SRT, and WebVTT transcript 
 Preserves raw timestamps, speaker labels, and original Amharic text.
 """
 
+import html
 import json
 import re
 from typing import Any, Dict, List, Optional, Union
@@ -21,8 +22,14 @@ _VTT_TIMECODE_REGEX = re.compile(
 
 # WebVTT voice tag: <v Dawit Tadesse> or <v.narrator Dawit>
 _VTT_VOICE_TAG_REGEX = re.compile(r"<\s*v(?:(?:\.[^>]+)|\s+([^>]+))>\s*")
-# General HTML/formatting tags: <b>, </i>, <c.yellow>, etc.
-_VTT_TAG_CLEANER = re.compile(r"</?[a-zA-Z0-9_.-]+(?:\s+[^>]*)?>")
+
+# WebVTT inline word-level timestamp tag: <00:01:23.456> or <01:23.456>
+_VTT_INLINE_TIMECODE_REGEX = re.compile(
+    r"<\s*(?:(?:\d{1,2}:)?\d{2}:\d{2}\.\d{3}|\d{1,2}:\d{2}\.\d{3})\s*>"
+)
+
+# General WebVTT / HTML formatting tags: <c>, </c>, <c.yellow>, <b>, </i>, <font color="...">, etc.
+_VTT_TAG_CLEANER = re.compile(r"</?[a-zA-Z][a-zA-Z0-9_.-]*(?:\.[a-zA-Z0-9_.-]+)*(?:\s+[^>]*)?>")
 
 # ASCII speaker prefix check: "Dawit: text" or "[Dawit] text"
 # Crucial: uses standard ASCII colon ':' so Ethiopic word separator '፡' is never matched!
@@ -227,7 +234,9 @@ def parse_srt_transcript(content: str) -> List[RawCue]:
 def parse_webvtt_transcript(content: str) -> List[RawCue]:
     """
     Parses WebVTT (.vtt) subtitle content into a list of RawCue objects.
-    Extracts voice tags (<v Speaker>) and strips styling markup.
+    Extracts voice tags (<v Speaker>), strips inline timestamps and styling markup,
+    unescapes character references, safely skips empty or formatting-only cues,
+    and preserves original cue order and timestamps.
     """
     if not content or not content.strip():
         raise MalformedCueError("WebVTT transcript content is empty.")
@@ -236,44 +245,50 @@ def parse_webvtt_transcript(content: str) -> List[RawCue]:
     if not normalized.startswith("WEBVTT"):
         raise MalformedCueError("WebVTT transcript must begin with 'WEBVTT' signature header.")
 
-    blocks = re.split(r"\n\s*\n", normalized)
+    lines = normalized.split("\n")
     cues: List[RawCue] = []
+    i = 0
 
-    for block_idx, block in enumerate(blocks):
-        lines = [line.strip() for line in block.split("\n") if line.strip()]
-        if not lines:
+    # 1. Skip header block (WEBVTT line and any header metadata lines until first empty line)
+    while i < len(lines) and lines[i].strip() != "":
+        i += 1
+
+    block_idx = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped:
+            i += 1
             continue
 
-        # Header block check (WEBVTT line or NOTE / STYLE / REGION blocks)
-        first_line = lines[0].upper()
-        if (
-            first_line.startswith("WEBVTT")
-            or first_line.startswith("NOTE")
-            or first_line.startswith("STYLE")
-            or first_line.startswith("REGION")
-        ):
-            # Check if this block also contains a timecode (rare in valid VTT, but handle if so)
-            has_timecode = any("-->" in l for l in lines)
-            if not has_timecode:
-                continue
-
-        # Locate timecode line
-        timecode_line_idx = -1
-        for idx, l in enumerate(lines):
-            if "-->" in l:
-                timecode_line_idx = idx
-                break
-
-        if timecode_line_idx == -1:
-            # Metadata block without cue
+        upper = stripped.upper()
+        # 2. Skip metadata blocks (NOTE, STYLE, REGION) until a blank line
+        if upper.startswith("NOTE") or upper.startswith("STYLE") or upper.startswith("REGION"):
+            while i < len(lines) and lines[i].strip() != "":
+                i += 1
             continue
 
-        timecode_line = lines[timecode_line_idx]
-        m = _VTT_TIMECODE_REGEX.match(timecode_line)
+        # 3. Locate timecode line (direct timecode or cue identifier followed by timecode)
+        is_tc = bool(_VTT_TIMECODE_REGEX.match(line))
+        cue_id = None
+        if is_tc:
+            tc_line = line
+            i += 1
+        elif i + 1 < len(lines) and _VTT_TIMECODE_REGEX.match(lines[i + 1]):
+            cue_id = stripped
+            tc_line = lines[i + 1]
+            i += 2
+        else:
+            # If line contains timecode separator '-->' but failed regex, it is malformed
+            if "-->" in line:
+                raise MalformedCueError(f"WebVTT block {block_idx + 1} has invalid timecode format: '{line}'")
+            # Stray line outside cue
+            i += 1
+            continue
+
+        m = _VTT_TIMECODE_REGEX.match(tc_line)
         if not m:
-            raise MalformedCueError(
-                f"WebVTT block {block_idx + 1} has invalid timecode format: '{timecode_line}'"
-            )
+            raise MalformedCueError(f"WebVTT block {block_idx + 1} has invalid timecode format: '{tc_line}'")
 
         sh_str, sm_str, ss_str, sms_str, eh_str, em_str, es_str, ems_str = m.groups()
         sh = int(sh_str) if sh_str is not None else 0
@@ -287,13 +302,52 @@ def parse_webvtt_transcript(content: str) -> List[RawCue]:
                 f"WebVTT block {block_idx + 1} has end time ({end_ms}ms) earlier than start time ({start_ms}ms)."
             )
 
-        text_lines = lines[timecode_line_idx + 1 :]
-        if not text_lines:
-            raise MalformedCueError(f"WebVTT block {block_idx + 1} contains no cue payload.")
+        # 4. Collect cue payload lines until boundary (blank line or next cue/metadata block)
+        payload: List[str] = []
+        while i < len(lines):
+            curr = lines[i]
+            curr_stripped = curr.strip()
 
-        raw_text = " ".join(text_lines)
+            if curr_stripped == "":
+                # Check ahead: does the blank line separate this cue from the next block?
+                peek = i + 1
+                while peek < len(lines) and lines[peek].strip() == "":
+                    peek += 1
+                if peek < len(lines):
+                    next_line = lines[peek]
+                    next_upper = next_line.strip().upper()
+                    if (
+                        _VTT_TIMECODE_REGEX.match(next_line)
+                        or (peek + 1 < len(lines) and _VTT_TIMECODE_REGEX.match(lines[peek + 1]))
+                        or next_upper.startswith("NOTE")
+                        or next_upper.startswith("STYLE")
+                        or next_upper.startswith("REGION")
+                    ):
+                        i += 1
+                        break
+                    else:
+                        payload.append(curr)
+                        i += 1
+                        continue
+                else:
+                    i += 1
+                    break
 
-        # Check for <v Speaker Name> voice tag
+            if _VTT_TIMECODE_REGEX.match(curr) or (
+                i + 1 < len(lines) and _VTT_TIMECODE_REGEX.match(lines[i + 1])
+            ):
+                break
+
+            payload.append(curr)
+            i += 1
+
+        block_idx += 1
+        if not payload:
+            continue
+
+        raw_text = " ".join(payload)
+
+        # 5. Extract voice tag <v Speaker Name>
         speaker = "Speaker"
         voice_match = _VTT_VOICE_TAG_REGEX.search(raw_text)
         if voice_match:
@@ -302,15 +356,22 @@ def parse_webvtt_transcript(content: str) -> List[RawCue]:
                 speaker = voice_val.strip()
             raw_text = _VTT_VOICE_TAG_REGEX.sub("", raw_text)
 
-        # Strip remaining HTML tags
-        cleaned_text = _VTT_TAG_CLEANER.sub("", raw_text).strip()
+        # 6. Strip inline word-level timestamps <HH:MM:SS.mmm>
+        raw_text = _VTT_INLINE_TIMECODE_REGEX.sub("", raw_text)
 
-        # If no voice tag, check standard prefix
+        # 7. Strip WebVTT/HTML formatting tags <c>, </c>, <b>, etc.
+        cleaned_text = _VTT_TAG_CLEANER.sub("", raw_text)
+
+        # 8. Unescape HTML character references (e.g. &gt;&gt; -> >>)
+        cleaned_text = html.unescape(cleaned_text).strip()
+
+        # 9. Extract speaker prefix if present (e.g. "Speaker:")
         if speaker == "Speaker":
             speaker, cleaned_text = _extract_speaker_and_text(cleaned_text)
 
+        # 10. Skip empty / formatting-only cue blocks safely
         if not cleaned_text:
-            raise MalformedCueError(f"WebVTT block {block_idx + 1} text is empty after tag cleanup.")
+            continue
 
         cues.append(
             RawCue(

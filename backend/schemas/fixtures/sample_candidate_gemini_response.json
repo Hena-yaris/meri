@@ -64,7 +64,7 @@
       "amharic_quote": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
       "english_translation": "The greatest test in logistics isn't buying trucks; it's calculating by the second the value of harvest perishing on the highway.",
       "speaker": "Dawit Tadesse",
-      "source_segment_index": 42,
+      "source_segment_indices": [42],
       "timestamp_seconds": 1420,
       "context": "Explaining why telemetry monitoring matters more than fleet volume during seasonal harvest peaks.",
       "importance_rationale": "Encapsulates the core mental shift from capital expenditure to information velocity."
@@ -73,7 +73,7 @@
       "amharic_quote": "ገበሬው የደከመበትን እህል ገበያ ላይ በክብር እንዲሸጥ መንገድ ማቃናት የሀገር ኢኮኖሚ መሰረት ነው።",
       "english_translation": "Smoothing the path so a farmer's labor sells with dignity in city markets is the fundamental bedrock of the national economy.",
       "speaker": "Dawit Tadesse",
-      "source_segment_index": 98,
+      "source_segment_indices": [98],
       "timestamp_seconds": 3210,
       "context": "Reflecting on the mission driving agricultural supply infrastructure in rural Ethiopia.",
       "importance_rationale": "Highlights the societal importance and economic dignity behind supply chain efficiency."

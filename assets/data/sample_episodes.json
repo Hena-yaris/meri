@@ -1,225 +1,87 @@
 {
-  "_meta": {
-    "dataset": "Meri Development Sample Dataset",
-    "disclaimer": "DEVELOPMENT SAMPLE ONLY: The guest profiles, companies, and quotations in this file are synthetic illustrative models created for engineering development and interface testing. They do not represent real Meri Podcast recordings, verified individuals, or real-life statements.",
-    "version": "1.0.0",
-    "lastUpdated": "2026-10-19"
-  },
   "episodes": [
     {
-      "id": "ep-101",
-      "title": "Scaling Cold Chain Logistics Across Agricultural Corridors",
-      "podcastTitle": "Meri Business Series",
-      "episodeNumber": 101,
-      "durationMinutes": 74,
-      "publishedAt": "2026-09-12T08:00:00.000Z",
-      "summary": "An in-depth exploration into the structural obstacles of agricultural freight in Ethiopia. Dawit outlines how building temperature-controlled transit networks reduced produce loss by 42% between Arsi and Addis Ababa markets.",
+      "id": "ep-199",
+      "title": "Turning Makeup into an Enterprise: Vocational Education & Brand Building",
+      "podcastTitle": "Meri Podcast",
+      "episodeNumber": 199,
+      "durationMinutes": 86,
+      "publishedAt": "2024-09-01T00:00:00.000Z",
+      "summary": "Wengelawit (Liya) Gole, founder and CEO of International Makeup School (IMS) and Dura by Liya, joins Meri Podcast to share how she transitioned from corporate accounting and aviation to pioneering professional vocational beauty education in Ethiopia. She details overcoming early societal skepticism, professionalizing makeup artistry as an accredited career, navigating high import tariffs on cosmetics, and scaling multi-branch service and retail operations.",
       "isFeatured": true,
-      "tags": ["Logistics", "Agritech", "Operations", "Supply Chain"],
-      "audioUrl": "https://sample-audio.meri.et/ep101.mp3",
+      "tags": [
+        "Vocational Training",
+        "Creative Economy",
+        "Brand Strategy",
+        "Service Operations"
+      ],
+      "audioUrl": null,
       "coverImageUrl": null,
-      "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep101",
+      "youtubeUrl": "https://www.youtube.com/watch?v=wohjyv428Us",
       "guest": {
-        "id": "guest-dawit-t",
-        "name": "Dawit Tadesse",
-        "title": "Founder & Managing Director",
-        "company": "Nile Cold Chain Logistics",
-        "industry": "Agricultural Logistics & Cold Storage",
-        "bio": "Mechanical engineer turned logistics entrepreneur who spent 8 years designing modular refrigerated truck containers to preserve perishable fruits and vegetables across high-altitude freight routes.",
+        "id": "guest-liya-gole",
+        "name": "Wengelawit (Liya) Gole",
+        "title": "Founder & CEO",
+        "company": "International Makeup School & Liya Gole Beauty",
+        "bio": "Ethiopian beauty entrepreneur, educator, and founder of International Makeup School (IMS), Liya Gole Salon, and Dura by Liya. Formerly an accounting and private aviation employee, she established Ethiopia's first accredited vocational makeup institute, training thousands of certified beauty professionals across the nation.",
+        "industry": "Beauty & Vocational Training",
         "avatarUrl": null
       },
       "insights": [
         {
-          "id": "ins-101-1",
-          "episodeId": "ep-101",
-          "title": "Decoupling Fleet Ownership from Logistics Orchestration",
-          "category": "Operations",
-          "summary": "Purchasing heavy transport vehicles burns seed capital too early. Partnering with existing regional truck owners through telemetry retrofits yields faster unit profitability.",
+          "id": "ins-199-1",
+          "episodeId": "ep-199",
+          "title": "Legitimizing Informal Trades Through Structured Accreditation",
+          "category": "Vocational Training",
+          "summary": "Transforming a dismissed service craft into a respected commercial enterprise requires formalizing curriculum, securing institutional accreditation, and setting professional service benchmarks.",
           "takeaways": [
-            "Heavy asset purchases tie down working capital needed for quality control.",
-            "Retrofitting independent trucker fleets with IoT temperature probes cuts capital expenditure by 60%.",
-            "Contract incentives must reward cargo arrival quality rather than transit velocity alone."
+            "Societal skepticism ('who goes to school to learn makeup?') was overcome by establishing rigorous vocational standards rather than informal apprenticeships.",
+            "Formal certification transformed personal creative talent into an institutional business that trained over 1,200 Ethiopian professionals and 2,600 overall.",
+            "Initial market demand was validated organically when over 1,300 students registered for IMS before launch without celebrity endorsements or mass media campaigns."
           ],
-          "practicalAction": "Audit current asset depreciation against subcontracting models before financing fleet expansions."
+          "practicalAction": "Standardize service protocols into a documented training curriculum before attempting to expand branch locations or recruit staff."
         },
         {
-          "id": "ins-101-2",
-          "episodeId": "ep-101",
-          "title": "Managing High-Altitude Cold Storage Fluctuations",
-          "category": "Technology & Infrastructure",
-          "summary": "Standard imported cooling units fail under frequent altitude shifts and grid volatility. Redundant hybrid solar-diesel compressors protect perishable inventory from spoiling.",
+          "id": "ins-199-2",
+          "episodeId": "ep-199",
+          "title": "Disciplined Capital Reinvestment Over Passive Extraction",
+          "category": "Service Operations",
+          "summary": "Service enterprises achieve operational durability when leadership constantly separates mere busywork from productive execution and reinvests cash flows back into capacity.",
           "takeaways": [
-            "Regional distribution hubs require dual-compressor failovers.",
-            "Thermal insulation using locally available volcanic pumice provides cost-effective insulation backup."
+            "Continuously audit organizational energy by asking: 'Are we genuinely being productive, or merely keeping ourselves busy?'",
+            "Work is not an entity that takes capital and stays silent; dedicated operational reinvestment reliably yields compounding institutional returns.",
+            "Frontier market hurdles—from 300% luxury import tariffs to regulatory delays—cannot be solved by foreign textbooks; persistent, iterative trial is mandatory."
           ],
-          "practicalAction": "Install thermal battery backups on perishable nodes subject to intermittent electrical supply."
+          "practicalAction": "Conduct regular leadership check-ins evaluating whether daily operational tasks directly expand enterprise productivity or simply generate routine noise."
         }
       ],
       "quotations": [
         {
-          "id": "quote-101-1",
-          "episodeId": "ep-101",
-          "amharicQuote": "የሎጂስቲክስ ስራ ትልቁ ፈተና መኪና መግዛት ሳይሆን በመንገድ ላይ የሚባክነውን ምርት ዋጋ በሰከንድ ማስላት ነው።",
-          "englishTranslation": "The greatest test in logistics isn't buying trucks; it's calculating by the second the value of harvest perishing on the highway.",
-          "speaker": "Dawit Tadesse",
-          "timestampSeconds": 1420,
-          "context": "Explaining why telemetry monitoring matters more than fleet volume during seasonal harvest peaks."
+          "id": "q-199-1",
+          "episodeId": "ep-199",
+          "amharicQuote": "ቢዚ ነሽ ወይስ ፕሮዳክቲቭ ነሽ ነው ሁል ጊዜ እራሴን ምጠይቀው ነገር ማለት ነው።",
+          "englishTranslation": "Are you busy or are you productive? That is what I always ask myself.",
+          "speaker": "Wengelawit (Liya) Gole",
+          "timestampSeconds": 65,
+          "context": "Reflecting on executive time allocation while balancing school administration, salon operations, and accessories retail."
         },
         {
-          "id": "quote-101-2",
-          "episodeId": "ep-101",
-          "amharicQuote": "ገበሬው የደከመበትን እህል ገበያ ላይ በክብር እንዲሸጥ መንገድ ማቃናት የሀገር ኢኮኖሚ መሰረት ነው።",
-          "englishTranslation": "Smoothing the path so a farmer's labor sells with dignity in city markets is the fundamental bedrock of the national economy.",
-          "speaker": "Dawit Tadesse",
-          "timestampSeconds": 3210,
-          "context": "Reflecting on the mission driving agricultural supply infrastructure in rural Ethiopia."
-        }
-      ]
-    },
-    {
-      "id": "ep-102",
-      "title": "Offline-First Digital Merchant Systems in Merkato",
-      "podcastTitle": "Meri Business Series",
-      "episodeNumber": 102,
-      "durationMinutes": 62,
-      "publishedAt": "2026-09-26T10:00:00.000Z",
-      "summary": "Bethlehem breaks down how building merchant bookkeeping and invoicing software tailored for offline connectivity convinced over 1,200 cash-first wholesalers in Merkato to digitize transactions.",
-      "isFeatured": false,
-      "tags": ["Fintech", "Product Strategy", "B2B", "Merchant Tech"],
-      "audioUrl": "https://sample-audio.meri.et/ep102.mp3",
-      "coverImageUrl": null,
-      "youtubeUrl": "https://youtu.be/sample-ep102",
-      "guest": {
-        "id": "guest-bethlehem-a",
-        "name": "Bethlehem Assefa",
-        "title": "Co-founder & Chief Product Officer",
-        "company": "Walia Merchant Tech",
-        "industry": "Enterprise & Retail Fintech",
-        "bio": "Product designer and former telecommunications systems architect who pioneered zero-sync transaction records for merchant stalls throughout Addis Ababa.",
-        "avatarUrl": null
-      },
-      "insights": [
+          "id": "q-199-2",
+          "episodeId": "ep-199",
+          "amharicQuote": "ስራ ሰው አይደለም ብር ወስዶ ፀጥ አይልም፤ ስራ ስትሰጠው ይሰጣል።",
+          "englishTranslation": "Work is not like a person who takes money and stays silent; when you invest in work, work gives back.",
+          "speaker": "Wengelawit (Liya) Gole",
+          "timestampSeconds": 56,
+          "context": "Explaining the compounding returns of reinvesting operational effort and capital into International Makeup School."
+        },
         {
-          "id": "ins-102-1",
-          "episodeId": "ep-102",
-          "title": "Designing for Mistrust Before Designing for Usability",
-          "category": "Product Strategy",
-          "summary": "Traditional traders resist cloud interfaces not due to complexity, but fear of transactional opacity and tax ambiguity. Physical receipts paired with local cryptographic logs bridge this confidence gap.",
-          "takeaways": [
-            "Hardware thermal printing remains an essential trust anchor for cash traders.",
-            "Local peer-to-peer Bluetooth receipt validation works when telecom towers experience downtime.",
-            "Amharic-first typography and vernacular financial terms drastically reduce merchant onboarding time."
-          ],
-          "practicalAction": "Test your software interface directly in busy marketplace stalls under natural sunlight and spotty network connectivity."
-        }
-      ],
-      "quotations": [
-        {
-          "id": "quote-102-1",
-          "episodeId": "ep-102",
-          "amharicQuote": "ነጋዴው የለመደውን ደብተር የሚያስቀምጠው አዲሱ ሲስተም ከሱ ደብተር በበለጠ እምነት የሚጥልበት ሆኖ ሲያገኘው ብቻ ነው።",
-          "englishTranslation": "A merchant will only set aside their paper ledger when the new system earns greater trust than their own notebook.",
-          "speaker": "Bethlehem Assefa",
-          "timestampSeconds": 1845,
-          "context": "Discussing user trust and behavioral friction when transitioning traditional traders to software."
-        }
-      ]
-    },
-    {
-      "id": "ep-103",
-      "title": "Domestic Pharmaceutical Formulation Under Foreign Exchange Constraints",
-      "podcastTitle": "Meri Business Series",
-      "episodeNumber": 103,
-      "durationMinutes": 88,
-      "publishedAt": "2026-10-04T14:30:00.000Z",
-      "summary": "Dr. Yohannes provides a masterclass on establishing sterile active pharmaceutical ingredient packaging inside industrial parks, navigating raw material procurement cycles, and building clinical workforce pipelines.",
-      "isFeatured": false,
-      "tags": ["Manufacturing", "Healthcare", "Policy & Trade", "Industrial"],
-      "audioUrl": "https://sample-audio.meri.et/ep103.mp3",
-      "coverImageUrl": null,
-      "youtubeUrl": "https://www.youtube.com/watch?v=sample-ep103",
-      "guest": {
-        "id": "guest-yohannes-b",
-        "name": "Dr. Yohannes Berhanu",
-        "title": "Chief Executive Officer",
-        "company": "Abyssinia Health Labs",
-        "industry": "Pharmaceutical Manufacturing",
-        "bio": "Pharmacologist and manufacturing executive with 20 years of experience transitioning critical IV fluid and antibiotic synthesis from imports to domestic industrial production.",
-        "avatarUrl": null
-      },
-      "insights": [
-        {
-          "id": "ins-103-1",
-          "episodeId": "ep-103",
-          "title": "Mitigating Foreign Currency Bottlenecks with Export Offset",
-          "category": "Capital & Finance",
-          "summary": "Relying on central bank allocations to import active pharmaceutical ingredients stalls production. Establishing a regional export wing in veterinary medicines generates captive foreign currency reserves for human medical imports.",
-          "takeaways": [
-            "Diversify product catalogs with veterinary consumables that have immediate East African export demand.",
-            "Reinvest export foreign currency yields directly into input materials for essential human pharmaceuticals.",
-            "Long-term industrial survival requires hedging import dependency with organic regional sales."
-          ],
-          "practicalAction": "Analyze which secondary product lines can generate export forex to subsidize primary domestic product inputs."
-        }
-      ],
-      "quotations": [
-        {
-          "id": "quote-103-1",
-          "episodeId": "ep-103",
-          "amharicQuote": "የሀገር ጤና በውጭ ምንዛሬ እጥረት ምክንያት መድሃኒት ሲያጣ ዝም ብሎ መመልከት ለሙያችንም ለህሊናችንም ክህደት ነው።",
-          "englishTranslation": "Standing idly by while patients lack medicine due to foreign exchange shortages is a betrayal of both our profession and our conscience.",
-          "speaker": "Dr. Yohannes Berhanu",
-          "timestampSeconds": 2490,
-          "context": "On why establishing domestic sterile manufacturing plants became a lifelong imperative."
-        }
-      ]
-    },
-    {
-      "id": "ep-104",
-      "title": "Moving from Raw Commodity to Packaged Specialty Coffee Exports",
-      "podcastTitle": "Meri Business Series",
-      "episodeNumber": 104,
-      "durationMinutes": 68,
-      "publishedAt": "2026-10-15T09:15:00.000Z",
-      "summary": "Samrawit details the ten-year journey from green coffee brokering to building a premium roasted and packaged brand sold directly to specialty retailers in Nairobi, Dubai, and Johannesburg.",
-      "isFeatured": false,
-      "tags": ["Export", "Branding", "Agriculture", "Value Addition"],
-      "audioUrl": "https://sample-audio.meri.et/ep104.mp3",
-      "coverImageUrl": null,
-      "youtubeUrl": null,
-      "guest": {
-        "id": "guest-samrawit-k",
-        "name": "Samrawit Kebede",
-        "title": "Founder & Master Roaster",
-        "company": "Buna Origin Roasters",
-        "industry": "Specialty Agri-Processing & Export",
-        "bio": "Agronomist and Q-grader champion who built an integrated origin roasting company providing living wage bonuses directly to washing station communities in Yirgacheffe and Guji.",
-        "avatarUrl": null
-      },
-      "insights": [
-        {
-          "id": "ins-104-1",
-          "episodeId": "ep-104",
-          "title": "Capturing Value at Origin Through Single-Origin Traceability",
-          "category": "Branding & Strategy",
-          "summary": "Exporting raw green beans captures only 12% of retail coffee margins. Packaging and nitrogen-flushing at origin retains up to 55% of value within the producing community.",
-          "takeaways": [
-            "Roasting at origin requires strict nitrogen packaging to guarantee freshness during sea transit.",
-            "Modern consumers pay a 40% premium when farm micro-lot origins and altitude metrics are transparently verified.",
-            "Direct trade partnerships require year-round cupping lab investments."
-          ],
-          "practicalAction": "Transition at least 15% of bulk commodity output into branded, value-added retail packages."
-        }
-      ],
-      "quotations": [
-        {
-          "id": "quote-104-1",
-          "episodeId": "ep-104",
-          "amharicQuote": "ቡናችን በዓለም ላይ ወደር የሌለው ቅርስ ሆኖ ሳለ፣ እሴቱን በሙሉ ሌላ ሀገር እንዲወስደው መፍቀድ የለብንም።",
-          "englishTranslation": "While our coffee remains an unmatched heritage to the world, we must never permit the entire downstream value to be captured elsewhere.",
-          "speaker": "Samrawit Kebede",
-          "timestampSeconds": 980,
-          "context": "Explaining why roasting and branding at origin is essential for Ethiopian coffee equity."
+          "id": "q-199-3",
+          "episodeId": "ep-199",
+          "amharicQuote": "ስታርት ካልጀመርክ የትም አትደርስም። እዚህ ሀገር የሚገጥሙ ነገሮች ቢዝነስ ቡክ ውስጥ የሉም፤ ሞክር እምቢ ካለህ ሞክር ነው።",
+          "englishTranslation": "If you don't start, you won't get anywhere. The challenges you face in this country are not in business books; you try, and if it resists, you try again.",
+          "speaker": "Wengelawit (Liya) Gole",
+          "timestampSeconds": 205,
+          "context": "Addressing aspiring Ethiopian entrepreneurs on navigating operational friction and systemic market hurdles."
         }
       ]
     }

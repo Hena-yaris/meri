@@ -95,3 +95,19 @@ final exploreFilteredEpisodesProvider =
 
   return repository.searchEpisodes(query, category: topic);
 });
+
+/// Dynamically extracts all distinct, available topic and category filters
+/// from loaded episodes, ensuring every filter chip matches real content.
+final availableTopicsProvider = Provider<List<String>>((ref) {
+  final episodesAsync = ref.watch(episodesProvider);
+  final episodes = episodesAsync.value ?? <Episode>[];
+  final topics = <String>{};
+  for (final ep in episodes) {
+    topics.addAll(ep.tags);
+    for (final ins in ep.insights) {
+      topics.add(ins.category);
+    }
+  }
+  final sorted = topics.toList()..sort();
+  return ['All', ...sorted];
+});

@@ -72,7 +72,7 @@ class TestExtractionService(unittest.TestCase):
             m["evidence_segment_indices"] = [1]
         response_data["insights"][0]["evidence_segment_indices"] = [1]
         response_data["insights"][1]["evidence_segment_indices"] = [1]
-        response_data["quotations"][0]["source_segment_index"] = 1
+        response_data["quotations"][0]["source_segment_indices"] = [1]
         response_data["quotations"][0]["timestamp_seconds"] = 5
         response_data["quotations"] = [response_data["quotations"][0]]  # Keep 1 quote matching segment 1
 

@@ -147,5 +147,76 @@ void main() {
       expect(find.text('EPISODE #101'), findsOneWidget);
       expect(find.text('LOGISTICS'), findsOneWidget);
     });
+
+    testWidgets('EditorialBadge handles longer labels and interactive taps with semantics', (tester) async {
+      var badgeTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                EditorialBadge(
+                  label: 'Transforming Informal Trades Through Standardized Accreditation',
+                  maxLines: 2,
+                  variant: EditorialBadgeVariant.sand,
+                ),
+                EditorialBadge(
+                  label: 'Filter by Operations',
+                  variant: EditorialBadgeVariant.orange,
+                  onTap: () => badgeTapped = true,
+                  semanticLabel: 'Filter by Operations category',
+                  trailingIcon: Icons.arrow_forward_rounded,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.text('TRANSFORMING INFORMAL TRADES THROUGH STANDARDIZED ACCREDITATION'),
+        findsOneWidget,
+      );
+      expect(find.text('FILTER BY OPERATIONS'), findsOneWidget);
+
+      final interactiveFinder = find.bySemanticsLabel('Filter by Operations category');
+      expect(interactiveFinder, findsOneWidget);
+
+      await tester.tap(interactiveFinder);
+      expect(badgeTapped, isTrue);
+    });
+
+    test('Material 3 AppTheme configures flat card, overlay, and hairline divider surfaces', () {
+      final lightTheme = AppTheme.lightTheme;
+      expect(lightTheme.cardTheme.elevation, 0);
+      expect(lightTheme.cardTheme.shadowColor, Colors.transparent);
+      expect(lightTheme.dividerTheme.thickness, 1);
+      expect(lightTheme.bottomSheetTheme.elevation, 2);
+      expect(lightTheme.dialogTheme.elevation, 3);
+      expect(lightTheme.inputDecorationTheme.filled, isTrue);
+
+      final darkTheme = AppTheme.darkTheme;
+      expect(darkTheme.cardTheme.elevation, 0);
+      expect(darkTheme.cardTheme.shadowColor, Colors.transparent);
+      expect(darkTheme.dividerTheme.thickness, 1);
+      expect(darkTheme.bottomSheetTheme.elevation, 2);
+      expect(darkTheme.dialogTheme.elevation, 3);
+      expect(darkTheme.inputDecorationTheme.filled, isTrue);
+    });
+
+    test('AppTypography provides full editorial headline and label hierarchy', () {
+      final displaySmall = AppTypography.displaySmall();
+      expect(displaySmall.fontSize, 22);
+
+      final headlineLarge = AppTypography.headlineLarge();
+      expect(headlineLarge.fontSize, 24);
+
+      final titleSmall = AppTypography.titleSmall();
+      expect(titleSmall.fontSize, 14);
+
+      final labelMedium = AppTypography.labelMedium();
+      expect(labelMedium.fontSize, 12);
+    });
   });
 }
